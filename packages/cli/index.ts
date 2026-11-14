@@ -10,6 +10,11 @@ import open from "./src/commands/open.ts";
 import update from "./src/commands/update.ts";
 import skills from "./src/commands/skills/index.ts";
 import env from "./src/commands/env/index.ts";
+import review from "./src/commands/review.ts";
+import exec from "./src/commands/exec.ts";
+import doctor from "./src/commands/doctor.ts";
+import create from "./src/commands/create.ts";
+import publish from "./src/commands/publish.ts";
 
 const main = defineCommand({
   meta: {
@@ -20,6 +25,8 @@ const main = defineCommand({
   subCommands: {
     init,
     add,
+    create,
+    publish,
     remove,
     workspace,
     checkout,
@@ -28,6 +35,9 @@ const main = defineCommand({
     update,
     skills,
     env,
+    review,
+    exec,
+    doctor,
   },
 });
 

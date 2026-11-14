@@ -1,5 +1,6 @@
 import { fsRemove } from "./fs.ts";
 import { realGitProcessRunner } from "./git-process.ts";
+import type { WorktreeAddOptions } from "./git-backend.ts";
 
 export interface WorktreeInfo {
   path: string;
@@ -96,77 +97,188 @@ export async function gitGetDefaultBranch(bareRepoPath: string): Promise<string>
 }
 
 /**
+ * Whether a fully-qualified ref (e.g. refs/heads/main) exists in a repository.
+ * show-ref matches the exact name; rev-parse would also resolve suffixes like
+ * `refs/remotes/origin/HEAD~1`.
+ */
+async function refExists(repoPath: string, ref: string): Promise<boolean> {
+  const { exitCode } = await realGitProcessRunner.run(["show-ref", "--verify", "--quiet", ref], {
+    cwd: repoPath,
+    nothrow: true,
+  });
+  return exitCode === 0;
+}
+
+/**
+ * Whether `ancestor` is reachable from `descendant` (true when they're equal).
+ */
+async function isAncestor(repoPath: string, ancestor: string, descendant: string): Promise<boolean> {
+  const { exitCode } = await realGitProcessRunner.run(["merge-base", "--is-ancestor", ancestor, descendant], {
+    cwd: repoPath,
+    nothrow: true,
+  });
+  return exitCode === 0;
+}
+
+/**
+ * Bring a worktree's checked-out branch up to origin/<branch> when that's a
+ * pure fast-forward. Never merges or rewrites: a branch that's ahead stays as
+ * is, and one that has diverged is reported for the caller to surface.
+ */
+export async function gitFastForwardToOrigin(
+  cwd: string,
+  branch: string
+): Promise<"updated" | "up-to-date" | "diverged" | "no-upstream"> {
+  const upstream = `refs/remotes/origin/${branch}`;
+  if (!(await refExists(cwd, upstream))) return "no-upstream";
+  if (await isAncestor(cwd, upstream, "HEAD")) return "up-to-date";
+  if (!(await isAncestor(cwd, "HEAD", upstream))) return "diverged";
+  await realGitProcessRunner.run(["merge", "--ff-only", upstream], { cwd });
+  return "updated";
+}
+
+/**
+ * Whether git can resolve a revision expression (tag, SHA, `x~2`) to a commit.
+ */
+async function commitExists(repoPath: string, rev: string): Promise<boolean> {
+  const { exitCode } = await realGitProcessRunner.run(["rev-parse", "--verify", "--quiet", `${rev}^{commit}`], {
+    cwd: repoPath,
+    nothrow: true,
+  });
+  return exitCode === 0;
+}
+
+/**
+ * Resolve a user-supplied start point to something `git worktree add` accepts.
+ *
+ * When both a local <name> and origin/<name> exist, take whichever has the other
+ * in its history: origin when the local branch is merely behind (fetches only
+ * move origin/*), local when it has commits origin lacks (unpushed work in a
+ * worktree). If they've diverged, local wins so no local work is dropped.
+ * Anything else git can resolve to a commit (a tag, a SHA, an explicit
+ * `origin/x`) is accepted as-is.
+ */
+export async function resolveStartPoint(bareRepoPath: string, from: string): Promise<string> {
+  const local = await refExists(bareRepoPath, `refs/heads/${from}`);
+  const remote = await refExists(bareRepoPath, `refs/remotes/origin/${from}`);
+  if (local && remote) {
+    return (await isAncestor(bareRepoPath, `refs/heads/${from}`, `refs/remotes/origin/${from}`))
+      ? `origin/${from}`
+      : from;
+  }
+  if (remote) return `origin/${from}`;
+  if (local) return from;
+  if (await commitExists(bareRepoPath, from)) return from;
+  throw new Error(`start point '${from}' not found`);
+}
+
+/**
  * Add a worktree from a bare repository
  * @param bareRepoPath - Path to the bare repository
  * @param worktreePath - Absolute path where the worktree should be created
  * @param branch - Optional branch name to checkout or create
+ * @param options - `from`: start point for a branch that doesn't exist yet,
+ *   resolved via resolveStartPoint; ignored when the branch already exists
  * @returns The actual branch name used (may differ from input if conflict occurred)
  */
 export async function gitWorktreeAdd(
   bareRepoPath: string,
   worktreePath: string,
-  branch?: string
+  branch?: string,
+  options: WorktreeAddOptions = {}
 ): Promise<string | undefined> {
-  if (branch) {
-    // Check if branch already exists
-    const { stdout: branches } = await realGitProcessRunner.run(["branch", "--list", branch], {
-      cwd: bareRepoPath,
+  const run = (args: string[]) => realGitProcessRunner.run(args, { cwd: bareRepoPath });
+  // Best-effort: only succeeds if origin/<upstream> exists on the remote
+  const setUpstream = (upstream: string, local: string) =>
+    realGitProcessRunner.run(["branch", `--set-upstream-to=origin/${upstream}`, local], {
+      cwd: worktreePath,
+      nothrow: true,
     });
 
-    if (branches.trim()) {
-      // Branch exists - try to checkout
-      try {
-        await realGitProcessRunner.run(["worktree", "add", worktreePath, branch], { cwd: bareRepoPath });
-        // Best-effort: only succeeds if origin/<branch> exists on the remote
-        await realGitProcessRunner.run(
-          ["branch", `--set-upstream-to=origin/${branch}`, branch],
-          { cwd: worktreePath, nothrow: true }
-        );
-        return branch;
-      } catch (error) {
-        // Failed to checkout (branch already checked out or other conflict)
-        // Generate unique name and create from the original branch
-        const uniqueName = await generateUniqueBranchName(bareRepoPath, branch);
-        await realGitProcessRunner.run(["worktree", "add", worktreePath, "-b", uniqueName, branch], {
-          cwd: bareRepoPath,
-        });
-        await realGitProcessRunner.run(
-          ["branch", `--set-upstream-to=origin/${branch}`, uniqueName],
-          { cwd: worktreePath, nothrow: true }
-        );
-        return uniqueName;
-      }
-    } else {
-      // Branch doesn't exist, try to create it
-      try {
-        await realGitProcessRunner.run(["worktree", "add", worktreePath, "-b", branch], { cwd: bareRepoPath });
-        // Best-effort: only succeeds if origin/<branch> exists on the remote
-        await realGitProcessRunner.run(
-          ["branch", `--set-upstream-to=origin/${branch}`, branch],
-          { cwd: worktreePath, nothrow: true }
-        );
-        return branch;
-      } catch (error) {
-        // Failed to create (hierarchical conflict like test vs test/something)
-        // Generate unique name and create
-        const uniqueName = await generateUniqueBranchName(bareRepoPath, branch);
-        await realGitProcessRunner.run(["worktree", "add", worktreePath, "-b", uniqueName], {
-          cwd: bareRepoPath,
-        });
-        return uniqueName;
-      }
-    }
-  } else {
+  if (!branch) {
     // No branch specified, use the repository's default branch
     const defaultBranch = await gitGetDefaultBranch(bareRepoPath);
-    await realGitProcessRunner.run(["worktree", "add", worktreePath, defaultBranch], { cwd: bareRepoPath });
-    // Best-effort: only succeeds if origin/<branch> exists on the remote
-    await realGitProcessRunner.run(
-      ["branch", `--set-upstream-to=origin/${defaultBranch}`, defaultBranch],
-      { cwd: worktreePath, nothrow: true }
-    );
+    await run(["worktree", "add", worktreePath, defaultBranch]);
+    await setUpstream(defaultBranch, defaultBranch);
     return defaultBranch;
   }
+
+  if (await refExists(bareRepoPath, `refs/heads/${branch}`)) {
+    // Branch exists locally - try to check it out
+    try {
+      await run(["worktree", "add", worktreePath, branch]);
+      await setUpstream(branch, branch);
+      return branch;
+    } catch {
+      // Already checked out in another worktree (or another conflict):
+      // create a uniquely named branch from it instead
+      const uniqueName = await generateUniqueBranchName(bareRepoPath, branch);
+      await run(["worktree", "add", "-b", uniqueName, worktreePath, branch]);
+      await setUpstream(branch, uniqueName);
+      return uniqueName;
+    }
+  }
+
+  if (await refExists(bareRepoPath, `refs/remotes/origin/${branch}`)) {
+    // Only on origin (e.g. pushed by someone else after the clone): create the
+    // local branch from it, tracking it, so the worktree has the real content
+    try {
+      await run(["worktree", "add", "--track", "-b", branch, worktreePath, `origin/${branch}`]);
+      return branch;
+    } catch {
+      // Hierarchical conflict like test vs test/something
+      const uniqueName = await generateUniqueBranchName(bareRepoPath, branch);
+      await run(["worktree", "add", "--no-track", "-b", uniqueName, worktreePath, `origin/${branch}`]);
+      await setUpstream(branch, uniqueName);
+      return uniqueName;
+    }
+  }
+
+  // New branch. With an explicit start point, don't let git's autoSetupMerge
+  // make it track the start point (e.g. origin/develop): `git push` would then
+  // target the wrong branch.
+  const startArgs = options.from
+    ? ["--no-track", await resolveStartPoint(bareRepoPath, options.from)]
+    : [];
+  const createArgs = (name: string) => {
+    const [noTrack, startPoint] = startArgs;
+    return noTrack
+      ? ["worktree", "add", noTrack, "-b", name, worktreePath, startPoint!]
+      : ["worktree", "add", "-b", name, worktreePath];
+  };
+
+  try {
+    await run(createArgs(branch));
+    return branch;
+  } catch {
+    // Failed to create (hierarchical conflict like test vs test/something)
+    const uniqueName = await generateUniqueBranchName(bareRepoPath, branch);
+    await run(createArgs(uniqueName));
+    return uniqueName;
+  }
+}
+
+/**
+ * List branch names in a bare repository: local heads plus origin's
+ * remote-tracking branches, deduplicated by short name (origin/x -> x).
+ */
+export async function gitListBranches(bareRepoPath: string): Promise<string[]> {
+  const { stdout } = await realGitProcessRunner.run(
+    ["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes/origin"],
+    { cwd: bareRepoPath }
+  );
+
+  const names = new Set<string>();
+  for (const line of stdout.split("\n")) {
+    const ref = line.trim();
+    if (ref.startsWith("refs/heads/")) {
+      names.add(ref.slice("refs/heads/".length));
+    } else if (ref.startsWith("refs/remotes/origin/")) {
+      const name = ref.slice("refs/remotes/origin/".length);
+      if (name !== "HEAD") names.add(name);
+    }
+  }
+  return [...names].sort();
 }
 
 /**
@@ -331,4 +443,84 @@ export async function gitDeleteBranch(
   } else {
     await realGitProcessRunner.run(["branch", "-d", branch], { cwd });
   }
+}
+
+/**
+ * Create a brand-new local repository: an empty bare repo, its first worktree
+ * on `branch`, and one empty commit. The commit matters: a worktree added to
+ * a repo with no commits becomes an unrelated orphan branch, so without it
+ * the first `jade workspace add` would branch off nothing.
+ *
+ * All-or-nothing: if any step fails (most often no git identity for the
+ * commit), the bare repo and worktree are removed again.
+ */
+export async function gitInitRepo(bareRepoPath: string, worktreePath: string, branch: string): Promise<void> {
+  try {
+    await realGitProcessRunner.run(["init", "--quiet", "--bare", "-b", branch, bareRepoPath]);
+    await realGitProcessRunner.run(["worktree", "add", "--quiet", "-b", branch, worktreePath], {
+      cwd: bareRepoPath,
+    });
+    await realGitProcessRunner.run(["commit", "--quiet", "--allow-empty", "-m", "Initial commit"], {
+      cwd: worktreePath,
+    });
+  } catch (error) {
+    await fsRemove(worktreePath);
+    await fsRemove(bareRepoPath);
+    throw error;
+  }
+}
+
+/**
+ * Whether the repo has an `origin` remote. Apps made with `jade create` have
+ * none until `jade publish`, and their bare repo is then the only copy.
+ */
+export async function gitHasOrigin(bareRepoPath: string): Promise<boolean> {
+  const { exitCode } = await realGitProcessRunner.run(["config", "--get", "remote.origin.url"], {
+    cwd: bareRepoPath,
+    nothrow: true,
+  });
+  return exitCode === 0;
+}
+
+/**
+ * Local branches holding commits that no remote-tracking branch contains, i.e.
+ * work that exists only in this bare repo. Uses the last fetch's view of origin.
+ */
+export async function gitUnpushedBranches(bareRepoPath: string): Promise<string[]> {
+  const { stdout } = await realGitProcessRunner.run(
+    ["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+    { cwd: bareRepoPath }
+  );
+  const unpushed: string[] = [];
+  for (const branch of stdout.split("\n").map((l) => l.trim()).filter(Boolean)) {
+    const { stdout: ahead } = await realGitProcessRunner.run(
+      ["rev-list", "--max-count=1", `refs/heads/${branch}`, "--not", "--remotes"],
+      { cwd: bareRepoPath }
+    );
+    if (ahead.trim()) unpushed.push(branch);
+  }
+  return unpushed;
+}
+
+/**
+ * Connect a local-only repo to a new, empty remote: add `origin` with the
+ * fetch refspec `jade add` sets on clone, push `branches` with upstream
+ * tracking (stored in the bare repo's config, so every worktree sees it), then
+ * fetch and record origin/HEAD.
+ *
+ * If the push fails, the remote is removed again, leaving the repo local-only
+ * so the publish can simply be retried.
+ */
+export async function gitPublish(bareRepoPath: string, url: string, branches: string[]): Promise<void> {
+  const run = (args: string[]) => realGitProcessRunner.run(args, { cwd: bareRepoPath });
+  await run(["remote", "add", "origin", url]);
+  try {
+    await run(["config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"]);
+    await run(["push", "--quiet", "-u", "origin", ...branches]);
+  } catch (error) {
+    await realGitProcessRunner.run(["remote", "remove", "origin"], { cwd: bareRepoPath, nothrow: true });
+    throw error;
+  }
+  await run(["fetch", "--quiet", "origin"]);
+  await realGitProcessRunner.run(["remote", "set-head", "origin", "--auto"], { cwd: bareRepoPath, nothrow: true });
 }

@@ -133,6 +133,19 @@ export function createMockFileSystemBackend(): MockFileSystemBackend {
     },
 
     /**
+     * Virtual content first; falls back to the real file for paths this fake
+     * never touched (same reconciliation as pathExists).
+     */
+    async readFile(path: string): Promise<string | null> {
+      record("readFile", path);
+      const normalized = resolve(path);
+      if (removed.has(normalized)) return null;
+      const entry = entries.get(normalized);
+      if (entry) return entry.type === "file" ? entry.content : null;
+      return (await fsExists(path)) ? await readFile(path, "utf8") : null;
+    },
+
+    /**
      * Purely virtual write; always creates parent directories, matching the
      * real fsWriteFile's guarantee.
      */

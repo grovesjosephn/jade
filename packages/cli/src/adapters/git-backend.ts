@@ -15,10 +15,24 @@ export interface WorktreeStatus {
   untracked: number;
 }
 
+export interface WorktreeAddOptions {
+  /** Start point for a branch that doesn't exist yet locally or on origin */
+  from?: string;
+}
+
 export interface GitBackend {
   cloneBare(url: string, destPath: string): Promise<void>;
   getDefaultBranch(bareRepoPath: string): Promise<string>;
-  worktreeAdd(bareRepoPath: string, worktreePath: string, branch?: string): Promise<string | undefined>;
+  worktreeAdd(
+    bareRepoPath: string,
+    worktreePath: string,
+    branch?: string,
+    options?: WorktreeAddOptions
+  ): Promise<string | undefined>;
+  /** Local + origin branch names, deduplicated by short name */
+  listBranches(bareRepoPath: string): Promise<string[]>;
+  /** Fast-forward the worktree's branch to origin/<branch> if it's strictly behind */
+  fastForwardToOrigin(cwd: string, branch: string): Promise<"updated" | "up-to-date" | "diverged" | "no-upstream">;
   worktreeList(bareRepoPath: string): Promise<WorktreeInfo[]>;
   worktreeRemove(bareRepoPath: string, worktreePath: string): Promise<void>;
   checkout(cwd: string, branch: string, create?: boolean): Promise<void>;
@@ -29,6 +43,14 @@ export interface GitBackend {
   fetch(bareRepoPath: string): Promise<void>;
   pullFF(cwd: string): Promise<void>;
   mergeBranch(cwd: string, branch: string): Promise<"merged" | "up-to-date">;
+  /** Create a local-only repo: bare repo, first worktree on `branch`, one empty commit */
+  initRepo(bareRepoPath: string, worktreePath: string, branch: string): Promise<void>;
+  /** Whether the repo has an `origin` remote (false for apps never published) */
+  hasOrigin(bareRepoPath: string): Promise<boolean>;
+  /** Local branches with commits no remote-tracking branch contains */
+  unpushedBranches(bareRepoPath: string): Promise<string[]>;
+  /** Add `origin` at `url`, push `branches` with upstream, fetch */
+  publish(bareRepoPath: string, url: string, branches: string[]): Promise<void>;
 }
 
 import {
@@ -45,6 +67,12 @@ import {
   gitFetch,
   gitPullFF,
   gitMergeBranch,
+  gitListBranches,
+  gitFastForwardToOrigin,
+  gitInitRepo,
+  gitHasOrigin,
+  gitUnpushedBranches,
+  gitPublish,
 } from "./git.ts";
 
 /**
@@ -65,4 +93,10 @@ export const realGitBackend: GitBackend = {
   fetch: gitFetch,
   pullFF: gitPullFF,
   mergeBranch: gitMergeBranch,
+  listBranches: gitListBranches,
+  fastForwardToOrigin: gitFastForwardToOrigin,
+  initRepo: gitInitRepo,
+  hasOrigin: gitHasOrigin,
+  unpushedBranches: gitUnpushedBranches,
+  publish: gitPublish,
 };

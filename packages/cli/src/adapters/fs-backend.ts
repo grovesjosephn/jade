@@ -9,10 +9,12 @@ export interface FileSystemBackend {
   remove(path: string): Promise<void>;
   copyFile(source: string, dest: string): Promise<void>;
   writeFile(path: string, contents: string): Promise<void>;
+  /** Text contents of a file, or null if it doesn't exist */
+  readFile(path: string): Promise<string | null>;
   listDirectories(path: string): Promise<string[]>;
 }
 
-import { fsExists, fsMkdirp, fsRemove, fsCopyFile, fsWriteFile, fsListDirectories } from "./fs.ts";
+import { fsExists, fsMkdirp, fsRemove, fsCopyFile, fsWriteFile, fsReadFile, fsListDirectories } from "./fs.ts";
 
 /**
  * Real filesystem backend — delegates to the actual fs utilities.
@@ -24,5 +26,6 @@ export const realFileSystemBackend: FileSystemBackend = {
   remove: fsRemove,
   copyFile: fsCopyFile,
   writeFile: fsWriteFile,
+  readFile: fsReadFile,
   listDirectories: fsListDirectories,
 };

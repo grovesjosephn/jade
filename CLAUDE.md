@@ -9,6 +9,7 @@ The word "workspace" is overloaded in older code and docs. In this codebase:
 - **Root**: the directory holding `.bare/` and `jade.json`. Functions call it `workspaceRoot`.
 - **App**: one repository. It has a bare clone at `.bare/<app>` and an entry in `jade.json`.
 - **Group**: a directory with one worktree per app. `main/` is the group on each app's default branch; every other group is `workspace/<name>/`, usually on branch `<name>`. The `jade workspace …` commands manage groups.
+- **Published**: the app has an `origin` remote. Apps made with `jade create` aren't published until `jade publish`.
 
 ## Where things go (`packages/cli/src`)
 

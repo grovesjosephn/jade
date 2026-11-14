@@ -14,6 +14,8 @@ import { createMockGitBackend } from "../../test/mock-git-backend.ts";
 import { createMockFileSystemBackend } from "../../test/mock-filesystem-backend.ts";
 import { createMockConfigBackend } from "../../test/mock-config-backend.ts";
 import { makeInitCommand } from "../init.ts";
+import { createWorkspaceFixture } from "../../test/workspace-fixture.ts";
+import { realFileSystemBackend } from "../../adapters/fs-backend.ts";
 
 /** Stub that auto-selects all provided apps — mirrors `-a` behavior for tests. */
 const selectAll: SelectAppsFn = async (apps) => apps;
@@ -528,5 +530,37 @@ describe("workspace update command", () => {
     await expectsExit(() =>
       updateCmd.run!({ args: { group: "does-not-exist", workspace: workspacePath } } as any)
     );
+  });
+});
+
+describe("workspace add --from", () => {
+  let fx: Awaited<ReturnType<typeof createWorkspaceFixture>>;
+
+  afterEach(async () => {
+    if (fx) await fx.tempDir.cleanup();
+  });
+
+  test("passes the start point to every new branch", async () => {
+    fx = await createWorkspaceFixture(["api", "web"]);
+    fx.mock.getState(fx.barePath("api"))!.branches.add("develop");
+    fx.mock.getState(fx.barePath("web"))!.remoteBranches.add("develop");
+
+    await makeWorkspaceAddCommand(fx.mock.git).run!({
+      args: { name: "feat", all: true, from: "develop", workspace: fx.root },
+    } as any);
+
+    const adds = fx.mock.calls.filter((c) => c.method === "worktreeAdd" && c.args[2] === "feat");
+    expect(adds.map((c) => c.args[3])).toEqual([{ from: "develop" }, { from: "develop" }]);
+  });
+
+  test("an unknown start point skips the app, and exits when nothing was added", async () => {
+    fx = await createWorkspaceFixture(["api"]);
+
+    await expectsExit(() =>
+      makeWorkspaceAddCommand(fx.mock.git).run!({
+        args: { name: "feat", all: true, from: "nope", workspace: fx.root },
+      } as any)
+    );
+    expect(await realFileSystemBackend.pathExists(join(fx.root, "workspace", "feat"))).toBe(false);
   });
 });

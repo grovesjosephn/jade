@@ -1,4 +1,11 @@
-import { stat, copyFile as nodeCopyFile, mkdir, rm as nodeRm, writeFile as nodeWriteFile } from "fs/promises";
+import {
+  stat,
+  copyFile as nodeCopyFile,
+  mkdir,
+  readFile as nodeReadFile,
+  rm as nodeRm,
+  writeFile as nodeWriteFile,
+} from "fs/promises";
 import { dirname, resolve } from "path";
 
 /**
@@ -32,6 +39,18 @@ export async function fsRemove(path: string): Promise<void> {
  */
 export async function fsCopyFile(source: string, dest: string): Promise<void> {
   await nodeCopyFile(source, dest);
+}
+
+/**
+ * Read a text file, or null if it doesn't exist
+ */
+export async function fsReadFile(path: string): Promise<string | null> {
+  try {
+    return await nodeReadFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 /**

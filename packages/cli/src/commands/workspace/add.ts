@@ -73,6 +73,11 @@ export function makeWorkspaceAddCommand(
         type: "string",
         description: "Comma-separated app names to add (bypasses --all and the interactive prompt)",
       },
+      from: {
+        type: "string",
+        description:
+          "Start new branches from this branch, tag or commit (origin/<from> preferred) instead of the repo's HEAD",
+      },
       workspace: {
         type: "string",
         alias: "w",
@@ -147,6 +152,7 @@ export function makeWorkspaceAddCommand(
           process.exit(1);
         }
 
+        const from = args.from as string | undefined;
         const created: string[] = [];
         const skipped: string[] = [];
         const s = spinner();
@@ -157,7 +163,15 @@ export function makeWorkspaceAddCommand(
           const appWorktreePath = resolve(worktreeDirPath, appName);
 
           try {
-            const actualBranch = await git.worktreeAdd(bareRepoPath, appWorktreePath, name);
+            if (from && (await git.listBranches(bareRepoPath)).includes(name)) {
+              log.warn(`${appName}: branch '${name}' already exists, ignoring --from ${from}`);
+            }
+            const actualBranch = await git.worktreeAdd(
+              bareRepoPath,
+              appWorktreePath,
+              name,
+              from ? { from } : undefined
+            );
             created.push(actualBranch !== name ? `${appName} (${actualBranch})` : appName);
             s.message(`Added ${appName}`);
           } catch (error) {
@@ -166,7 +180,13 @@ export function makeWorkspaceAddCommand(
           }
         }
 
-        s.stop(`Apps added`);
+        s.stop(created.length > 0 ? `Apps added` : `No apps added`);
+
+        if (created.length === 0) {
+          if (!existing) await fs.remove(worktreeDirPath);
+          cancel(`Could not add any apps to '${name}'.`);
+          process.exit(1);
+        }
 
         const envCopied: string[] = [];
         for (const appName of selectedApps) {

@@ -66,6 +66,7 @@ export function makeWorkspaceUpdateCommand(
 
       const merged: string[] = [];
       const upToDate: string[] = [];
+      const localOnly: string[] = [];
       const failed: { name: string; error: unknown }[] = [];
       const s = spinner();
 
@@ -76,6 +77,11 @@ export function makeWorkspaceUpdateCommand(
         s.start(`Updating ${appName}`);
         try {
           const bareRepoPath = resolve(barePath, appName);
+          if (!(await git.hasOrigin(bareRepoPath))) {
+            localOnly.push(appName);
+            s.stop(`${appName}: local only, nothing to merge from`);
+            continue;
+          }
           const defaultBranch =
             getAppDefaultBranch(jadeConfig, appName) ??
             (await git.getDefaultBranch(bareRepoPath));
@@ -97,11 +103,12 @@ export function makeWorkspaceUpdateCommand(
         }
       }
 
-      if (merged.length === 0 && upToDate.length === 0 && failed.length === 0) {
+      if (merged.length === 0 && upToDate.length === 0 && failed.length === 0 && localOnly.length === 0) {
         log.warn(`No apps found in '${group}'.`);
       } else {
         if (merged.length > 0) log.success(`Merged: ${merged.join(", ")}`);
         if (upToDate.length > 0) log.info(`Already up to date: ${upToDate.join(", ")}`);
+        if (localOnly.length > 0) log.info(`Skipped, not published yet: ${localOnly.join(", ")}`);
         if (failed.length > 0) log.warn(`Failed: ${failed.map((f) => f.name).join(", ")}`);
       }
 

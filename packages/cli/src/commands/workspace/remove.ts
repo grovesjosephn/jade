@@ -94,15 +94,19 @@ export function makeWorkspaceRemoveCommand(
           branchSpinner.start(`Deleting branch '${name}' in all apps`);
           const deleted: string[] = [];
           const skipped: string[] = [];
+          const notForced: string[] = [];
 
           for (const appName of bareRepos) {
             const mainAppPath = resolve(workspaceRoot, "main", appName);
             if (await fs.pathExists(mainAppPath)) {
+              // An unpublished app has no other copy of the branch, so -f would
+              // destroy unmerged work outright. Fall back to a safe delete there.
+              const unpublished = force && !(await git.hasOrigin(resolve(barePath, appName)));
               try {
-                await git.deleteBranch(mainAppPath, name, force);
+                await git.deleteBranch(mainAppPath, name, force && !unpublished);
                 deleted.push(appName);
               } catch {
-                skipped.push(appName);
+                (unpublished ? notForced : skipped).push(appName);
               }
             }
           }
@@ -116,6 +120,12 @@ export function makeWorkspaceRemoveCommand(
             log.warn(
               `Skipped (unmerged changes): ${skipped.join(", ")}` +
               (!force ? `\n  Use -f to force delete` : "")
+            );
+          }
+          if (notForced.length > 0) {
+            log.warn(
+              `Kept, unmerged and never published (no other copy): ${notForced.join(", ")}\n` +
+              `  Delete by hand if you're sure: git -C .bare/<app> branch -D ${name}`
             );
           }
         }
