@@ -12,9 +12,13 @@ import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-ba
  * records the expected branch per app instead.
  */
 export interface GroupMeta {
-  kind: "review";
-  /** The id the group was built from, e.g. JADE-01 */
-  ticket: string;
+  /**
+   * review: built by `jade review` from a ticket. import: made by `jade
+   * import` for a branch whose name can't be a group name (e.g. `feature/x`).
+   */
+  kind: "review" | "import";
+  /** For review groups, the id the group was built from, e.g. JADE-01 */
+  ticket?: string;
   /** app name -> the branch it should be on; apps not listed are expected absent */
   branches: Record<string, string>;
 }
@@ -37,7 +41,7 @@ export async function readGroupMeta(
   if (raw === null) return null;
   try {
     const parsed = JSON.parse(raw);
-    if (parsed?.kind === "review" && typeof parsed.branches === "object" && parsed.branches) {
+    if ((parsed?.kind === "review" || parsed?.kind === "import") && typeof parsed.branches === "object" && parsed.branches) {
       return parsed as GroupMeta;
     }
   } catch {

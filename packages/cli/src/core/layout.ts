@@ -32,6 +32,13 @@ export async function isValidWorkspace(
   return await fs.pathExists(resolve(path, ".bare"));
 }
 
+/** Names jade can use as a directory, a git remote path and a gh repo name (apps and groups). */
+const APP_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+export function isUsableName(name: string): boolean {
+  return APP_NAME.test(name);
+}
+
 /**
  * Get the path to the .bare directory
  */

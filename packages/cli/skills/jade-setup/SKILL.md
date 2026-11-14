@@ -81,6 +81,16 @@ Each `add` bare-clones the repo into `.bare/<app>/` and checks out a
 worktree on the default branch into `main/<app>/`. It also back-fills the app
 into every **existing** workspace group (there's only `main` at this point).
 
+Already have a checkout with work in progress? Import it instead of cloning
+again:
+
+```bash
+jade import ~/code/frontend            # branch + uncommitted work → workspace/<branch>/frontend
+jade import ~/code/backend -g wip      # needed when the work is on the default branch
+```
+
+The original directory isn't changed; delete it once the import looks right.
+
 Confirm what you've got:
 
 ```bash

@@ -6,6 +6,7 @@ import {
   getBarePath,
   getCurrentGroup,
   getWorktreeGroupPath,
+  isUsableName,
   listWorktreeDirs,
 } from "../core/layout.ts";
 import { addAppToConfig } from "../core/config.ts";
@@ -15,9 +16,6 @@ import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts
 import { readGroupMeta, writeGroupMeta } from "../core/group-meta.ts";
 import { runGh as defaultRunGh, type GhRunner } from "../adapters/gh.ts";
 import { publishApp } from "../core/publish.ts";
-
-/** Names jade can use as a directory, a git remote path and a gh repo name. */
-const APP_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**
  * Which feature groups get a worktree for the new app. Default: the group the
@@ -90,7 +88,7 @@ export function makeCreateCommand(
 
       const appName = args.name as string;
       const branch = args.branch as string;
-      if (!APP_NAME.test(appName)) {
+      if (!isUsableName(appName)) {
         cancel(`'${appName}' isn't a usable app name (letters, digits, '.', '_' and '-')`);
         process.exit(1);
       }

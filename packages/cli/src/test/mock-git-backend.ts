@@ -1,6 +1,7 @@
 import { mkdir, rm } from "fs/promises";
 import { join } from "path";
 import type { GitBackend, WorktreeAddOptions, WorktreeInfo, WorktreeStatus } from "../adapters/git-backend.ts";
+import type { ImportSource } from "../adapters/git-import.ts";
 
 /**
  * In-memory state that the mock backend tracks per bare repo path.
@@ -62,6 +63,11 @@ export interface MockGitBackend {
   getState(bareRepoPath: string): MockBareRepoState | undefined;
   /** Pre-seed state for a bare repo (useful for pre-existing repos in worktree tests) */
   seedState(bareRepoPath: string, state?: Partial<MockBareRepoState>): void;
+  /**
+   * Source clones `jade import` can see, keyed by the path passed to it.
+   * `branches` lists what the source has (local or origin/*).
+   */
+  importSources: Map<string, ImportSource & { branches: string[] }>;
   /** Calls recorded on the backend (for assertion purposes) */
   calls: { method: string; args: unknown[] }[];
 }
@@ -69,6 +75,8 @@ export interface MockGitBackend {
 export function createMockGitBackend(): MockGitBackend {
   const states = new Map<string, MockBareRepoState>();
   const calls: { method: string; args: unknown[] }[] = [];
+  const importSources = new Map<string, ImportSource & { branches: string[] }>();
+  const sourceByRoot = (root: string) => [...importSources.values()].find((s) => s.root === root);
 
   function record(method: string, ...args: unknown[]) {
     calls.push({ method, args });
@@ -300,6 +308,40 @@ export function createMockGitBackend(): MockGitBackend {
         state.unpushed.delete(b);
       }
     },
+
+    async inspectImportSource(path: string): Promise<ImportSource | null> {
+      record("inspectImportSource", path);
+      const source = importSources.get(path);
+      if (!source) return null;
+      const { branches: _branches, ...rest } = source;
+      return rest;
+    },
+
+    async sourceHasBranch(sourceRoot: string, branch: string): Promise<boolean> {
+      record("sourceHasBranch", sourceRoot, branch);
+      return sourceByRoot(sourceRoot)?.branches.includes(branch) ?? false;
+    },
+
+    /** Simulate `jade import`'s bare repo: the source's branches, no worktrees yet. */
+    async importBare(sourceRoot: string, bareRepoPath: string, defaultBranch: string, originUrl: string | null) {
+      record("importBare", sourceRoot, bareRepoPath, defaultBranch, originUrl);
+      await mkdir(bareRepoPath, { recursive: true });
+      await Bun.write(join(bareRepoPath, "HEAD"), `ref: refs/heads/${defaultBranch}\n`);
+      states.set(
+        bareRepoPath,
+        makeMockBareRepoState({
+          defaultBranch,
+          branches: new Set(sourceByRoot(sourceRoot)?.branches ?? [defaultBranch]),
+          hasOrigin: originUrl !== null,
+          originUrl: originUrl ?? undefined,
+        })
+      );
+    },
+
+    async carryWork(sourceRoot: string, bareRepoPath: string, worktreePath: string) {
+      record("carryWork", sourceRoot, bareRepoPath, worktreePath);
+      return { tracked: sourceByRoot(sourceRoot)?.dirty ?? false, untracked: [], skipped: [] };
+    },
   };
 
   return {
@@ -308,6 +350,7 @@ export function createMockGitBackend(): MockGitBackend {
     seedState(bareRepoPath, overrides = {}) {
       states.set(bareRepoPath, makeMockBareRepoState(overrides));
     },
+    importSources,
     calls,
   };
 }

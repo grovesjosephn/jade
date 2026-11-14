@@ -15,6 +15,7 @@ import exec from "./src/commands/exec.ts";
 import doctor from "./src/commands/doctor.ts";
 import create from "./src/commands/create.ts";
 import publish from "./src/commands/publish.ts";
+import importCommand from "./src/commands/import.ts";
 
 const main = defineCommand({
   meta: {
@@ -25,6 +26,7 @@ const main = defineCommand({
   subCommands: {
     init,
     add,
+    import: importCommand,
     create,
     publish,
     remove,

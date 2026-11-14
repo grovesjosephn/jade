@@ -20,6 +20,8 @@ export interface WorktreeAddOptions {
   from?: string;
 }
 
+import type { ImportSource, CarriedWork } from "./git-import.ts";
+
 export interface GitBackend {
   cloneBare(url: string, destPath: string): Promise<void>;
   getDefaultBranch(bareRepoPath: string): Promise<string>;
@@ -51,6 +53,14 @@ export interface GitBackend {
   unpushedBranches(bareRepoPath: string): Promise<string[]>;
   /** Add `origin` at `url`, push `branches` with upstream, fetch */
   publish(bareRepoPath: string, url: string, branches: string[]): Promise<void>;
+  /** Describe the ordinary clone at `path` for `jade import`; null if it isn't in a git work tree */
+  inspectImportSource(path: string): Promise<ImportSource | null>;
+  /** Whether the source clone has `branch` locally or as origin/<branch> */
+  sourceHasBranch(sourceRoot: string, branch: string): Promise<boolean>;
+  /** Build a bare repo from a source clone's refs, HEAD on `defaultBranch`, origin as given */
+  importBare(sourceRoot: string, bareRepoPath: string, defaultBranch: string, originUrl: string | null): Promise<void>;
+  /** Copy the source's staged, unstaged and untracked work into a worktree at the same commit */
+  carryWork(sourceRoot: string, bareRepoPath: string, worktreePath: string): Promise<CarriedWork>;
 }
 
 import {
@@ -74,6 +84,7 @@ import {
   gitUnpushedBranches,
   gitPublish,
 } from "./git.ts";
+import { gitCarryWork, gitImportBare, gitInspectImportSource, gitSourceHasBranch } from "./git-import.ts";
 
 /**
  * Real git backend — delegates to the actual git utilities.
@@ -99,4 +110,8 @@ export const realGitBackend: GitBackend = {
   hasOrigin: gitHasOrigin,
   unpushedBranches: gitUnpushedBranches,
   publish: gitPublish,
+  inspectImportSource: gitInspectImportSource,
+  sourceHasBranch: gitSourceHasBranch,
+  importBare: gitImportBare,
+  carryWork: gitCarryWork,
 };
