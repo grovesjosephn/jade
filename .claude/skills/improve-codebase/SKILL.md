@@ -34,6 +34,15 @@ Leave out commits that aren't features: initial imports, mass reformatting, and
 big refactors. They touch everything and say nothing about change cost.
 `--max-files` (default 40) skips them automatically.
 
+Make sure each spec really is **one** feature:
+
+- The script marks commits whose subject lists several things ("review, exec
+  and doctor") as *may bundle several features*. Split such a commit by
+  directory or leave it out; counted as one feature it hides the per-feature cost.
+- `--working` is only one feature if nothing else is uncommitted. When it's
+  mixed with other work (a rename in progress, say), write the feature's files
+  to a list and pass `@<file>`.
+
 ## 2. Measure the footprint
 
 ```bash
@@ -44,6 +53,13 @@ big refactors. They touch everything and say nothing about change cost.
   copies of skills or configs. Lockfiles are always dropped.
 - `--strip` a prefix that changed during history (e.g. `'^packages/cli/'` after a
   monorepo split). Otherwise moved files count as different files.
+- Renames git recorded are followed automatically (`--no-renames` turns this
+  off), so `utils/git.ts` and `adapters/git.ts` count as one file. A file that
+  was **split** into several (`workspace.ts` into `workspace/*.ts`) can't be
+  followed; read its count as "this used to be one hot file".
+- Find out which files are generated before you start: the agent instructions
+  file (CLAUDE.md, AGENTS.md) often says (installed skill copies, build output).
+  Exclude them, or each feature looks twice as big.
 - `--src` limits the cross-feature table to source, so docs don't dominate it.
 
 Then sort every touched file of every feature into one of three kinds:
@@ -57,6 +73,16 @@ Then sort every touched file of every feature into one of three kinds:
 The table of "files touched by 2+ features" lists the candidates for tax. Each
 tax file is a recurring cost; each surprise points to a hidden dependency.
 Record the counts: they're the before numbers for step 6.
+
+Two refinements when sorting:
+
+- **One-time vs recurring surprises.** Moving shared code into core because two
+  commands now need it (as a "no imports between commands" rule demands) is a
+  one-time cost, and a sign the rule works. Count it, but don't rank it with
+  surprises every similar feature would pay again.
+- **Tax that bought nothing.** For each tax file, ask whether the feature used
+  what it paid for. A fake added to a test mock that no test calls (check with
+  grep) is pure structural cost, and the strongest argument for changing it.
 
 ## 3. Read the tree cold
 
@@ -135,6 +161,24 @@ Each step in the plan:
 Put the steps that only move files first: they're cheap and safe, and they make
 the later ones easier to see.
 
+## Reviewing a single feature
+
+When asked to check one feature that was just added (rather than the whole
+codebase), run the same steps on that feature alone:
+
+1. Measure it (`@<file>` if it shares the tree or a commit with other work)
+   and sort every file into expected, tax and surprise.
+2. For each tax or surprise file, say whether it was avoidable at the time and
+   what structure would have avoided it.
+3. Check what the feature **added** to the existing problems: another copy of
+   a fact computed elsewhere (a default-branch heuristic), another copy of the
+   boilerplate (root lookup, `process.exit`), domain rules written inline in the
+   entry point that belong in core (which branch a group expects, `.env` rules).
+4. Read the tree cold again and note anything the feature made harder to read
+   (e.g. a fourth file with the same prefix).
+5. Report as in step 6, but rank findings by what the **next similar feature**
+   would save.
+
 ## Carrying out changes
 
 Before the first step:
@@ -180,3 +224,13 @@ The proposal was `commands/` mirroring the CLI (`commands/workspace/add.ts` for
 `jade workspace add`), with `utils/` split into `core/` (jade's concepts) and
 `adapters/` (git, gh, fs, herdr, tmux, one file each). It went in in this order:
 moves first, then the cross-command imports, then the interface changes.
+
+After the restructure, a review of the next feature (`jade import`: 13 files)
+showed what was left:
+
+- 7 expected and 3 tax files (git interface + registry, the git mock, command
+  registration). None of the 4 mock methods it added was used by a test.
+- 3 surprises. Two were one-time: moving the app-name check into `core/` so
+  two commands could share it. The third was recurring: writing
+  `.jade-group.json` required knowing how status and doctor judge a group's
+  branch. Extracting `recordAppBranch` into `core/group-meta.ts` fixed it.
