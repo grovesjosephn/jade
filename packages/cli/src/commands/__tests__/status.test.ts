@@ -3,7 +3,7 @@ import { join } from "path";
 import { mkdir } from "fs/promises";
 import { makeStatusCommand, resolveStatusTarget } from "../status.ts";
 import { makeAddCommand } from "../add.ts";
-import { makeWorkspaceAddCommand, type SelectAppsFn } from "../workspace.ts";
+import { makeWorkspaceAddCommand, type SelectAppsFn } from "../workspace/add.ts";
 
 const selectAll: SelectAppsFn = async (apps) => apps;
 import {
@@ -14,7 +14,7 @@ import {
 import { createMockGitBackend } from "../../test/mock-git-backend.ts";
 import initCommand from "../init.ts";
 import pkg from "../../../package.json" with { type: "json" };
-import type { HerdrRunner } from "../../utils/herdr.ts";
+import type { HerdrRunner } from "../../adapters/herdr.ts";
 
 describe("status command", () => {
   let tempDir: Awaited<ReturnType<typeof createTempDir>>;

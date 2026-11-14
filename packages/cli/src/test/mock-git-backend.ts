@@ -1,6 +1,6 @@
 import { mkdir, rm } from "fs/promises";
 import { join } from "path";
-import type { GitBackend, WorktreeInfo, WorktreeStatus } from "../utils/git-backend.ts";
+import type { GitBackend, WorktreeInfo, WorktreeStatus } from "../adapters/git-backend.ts";
 
 /**
  * In-memory state that the mock backend tracks per bare repo path.

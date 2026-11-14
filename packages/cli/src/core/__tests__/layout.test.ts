@@ -9,7 +9,7 @@ import {
   getConfigPath,
   listBareRepos,
   listWorktreeDirs,
-} from "../workspace.ts";
+} from "../layout.ts";
 import { createTempDir } from "../../test/helpers.ts";
 
 describe("workspace", () => {

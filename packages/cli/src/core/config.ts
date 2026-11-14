@@ -1,4 +1,4 @@
-import { getConfigPath } from "./workspace.ts";
+import { getConfigPath } from "./layout.ts";
 import type { ConfigBackend } from "./config-backend.ts";
 
 export interface AppEntry {

@@ -1,7 +1,7 @@
 import { dirname, resolve, basename, sep } from "path";
 import { readFile } from "fs/promises";
-import type { FileSystemBackend } from "../utils/fs-backend.ts";
-import { fsExists, fsListDirectories, fsRemove } from "../utils/fs.ts";
+import type { FileSystemBackend } from "../adapters/fs-backend.ts";
+import { fsExists, fsListDirectories, fsRemove } from "../adapters/fs.ts";
 
 type VirtualEntry = { type: "dir" } | { type: "file"; content: string };
 

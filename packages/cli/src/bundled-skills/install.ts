@@ -1,6 +1,6 @@
 import { join } from "path";
-import type { BundledSkillPackage } from "../bundled-skills/registry.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "./fs-backend.ts";
+import type { BundledSkillPackage } from "./registry.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 
 export type InstallSkillsOptions = {
   /** Relative path segments under projectRoot (default: [".cursor", "skills"]) */

@@ -1,9 +1,9 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "@clack/prompts";
-import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, listBareRepos } from "../utils/workspace.ts";
-import { type GitBackend, realGitBackend } from "../utils/git-backend.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
+import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, listBareRepos } from "../core/layout.ts";
+import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 
 export function makeUpdateCommand(
   git: GitBackend = realGitBackend,

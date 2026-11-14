@@ -1,7 +1,7 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { join } from "path";
-import { getAppNames } from "../../utils/config.ts";
-import { listBareRepos } from "../../utils/workspace.ts";
+import { getAppNames } from "../../core/config.ts";
+import { listBareRepos } from "../../core/layout.ts";
 import { makeAddCommand, isRepoUrl, buildOrgRepoUrl, deriveAppName } from "../add.ts";
 import { createTempDir } from "../../test/helpers.ts";
 import { createMockGitBackend } from "../../test/mock-git-backend.ts";

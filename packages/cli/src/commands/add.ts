@@ -1,11 +1,11 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "@clack/prompts";
-import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath } from "../utils/workspace.ts";
-import { addAppToConfig } from "../utils/config.ts";
-import { type GitBackend, realGitBackend } from "../utils/git-backend.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
-import { type ConfigBackend, realConfigBackend } from "../utils/config-backend.ts";
+import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath } from "../core/layout.ts";
+import { addAppToConfig } from "../core/config.ts";
+import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
+import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
 
 /**
  * Is the positional argument a clone URL rather than a bare repo name?

@@ -1,12 +1,12 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { findWorkspaceRoot, getCurrentGroup, listWorktreeDirs } from "../utils/workspace.ts";
-import { resolveGroup, type ResolvedGroup } from "../utils/group.ts";
-import { getAppEnvSourcePath } from "../utils/env.ts";
-import { type GitBackend, realGitBackend, type WorktreeStatus } from "../utils/git-backend.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
-import { type ConfigBackend, realConfigBackend } from "../utils/config-backend.ts";
-import { defaultRunHerdr, findWorkspaceByLabel, type HerdrRunner } from "../utils/herdr.ts";
+import { findWorkspaceRoot, getCurrentGroup, listWorktreeDirs } from "../core/layout.ts";
+import { resolveGroup, type ResolvedGroup } from "../core/group.ts";
+import { getAppEnvSourcePath } from "../core/env.ts";
+import { type GitBackend, realGitBackend, type WorktreeStatus } from "../adapters/git-backend.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
+import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
+import { defaultRunHerdr, findWorkspaceByLabel, type HerdrRunner } from "../adapters/herdr.ts";
 import pkg from "../../package.json" with { type: "json" };
 
 export type StatusTarget = { view: "root" } | { view: "workspace"; name: string };

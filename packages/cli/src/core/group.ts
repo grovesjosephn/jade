@@ -1,11 +1,11 @@
 import { resolve } from "path";
-import { getWorktreeGroupPath, listBareRepos } from "./workspace.ts";
+import { getWorktreeGroupPath, listBareRepos } from "./layout.ts";
 import { getAppNames, readConfig } from "./config.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "./fs-backend.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 
 /**
- * Lives in its own module rather than workspace.ts: config.ts already imports
- * workspace.ts, so resolving a group (which needs jade.json for app ordering)
+ * Lives in its own module rather than layout.ts: config.ts already imports
+ * layout.ts, so resolving a group (which needs jade.json for app ordering)
  * from there would introduce a circular import.
  */
 

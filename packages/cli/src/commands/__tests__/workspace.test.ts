@@ -1,13 +1,9 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { join } from "path";
-import {
-  makeWorkspaceAddCommand,
-  makeWorkspaceListCommand,
-  makeWorkspaceRemoveCommand,
-  makeWorkspaceUpdateCommand,
-  resolveAppsList,
-  type SelectAppsFn,
-} from "../workspace.ts";
+import { makeWorkspaceAddCommand, resolveAppsList, type SelectAppsFn } from "../workspace/add.ts";
+import { makeWorkspaceListCommand } from "../workspace/list.ts";
+import { makeWorkspaceRemoveCommand } from "../workspace/remove.ts";
+import { makeWorkspaceUpdateCommand } from "../workspace/update.ts";
 import { makeAddCommand } from "../add.ts";
 import {
   createTempDir,
@@ -139,7 +135,7 @@ describe("workspace add command", () => {
 
     // Second run: directory exists — should offer only beta and add it.
     // This is the case that most directly depends on the filesystem fake's
-    // real-disk fallback: workspace.ts's own `fs.pathExists` check on the
+    // real-disk fallback: workspace/add.ts's own `fs.pathExists` check on the
     // group directory (created virtually, above) must agree with what the
     // *git* fake (a separate mock, doing real mkdir under the hood) did to
     // the alpha worktree in the first run.

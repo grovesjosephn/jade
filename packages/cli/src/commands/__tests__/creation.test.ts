@@ -14,12 +14,12 @@ import { createMockFileSystemBackend, type MockFileSystemBackend } from "../../t
 import { createMockConfigBackend, type MockConfigBackend } from "../../test/mock-config-backend.ts";
 import { createTempDir, expectsExit } from "../../test/helpers.ts";
 import { makeAddCommand } from "../add.ts";
-import { makeWorkspaceAddCommand, type SelectAppsFn } from "../workspace.ts";
+import { makeWorkspaceAddCommand, type SelectAppsFn } from "../workspace/add.ts";
 import { makeInitCommand } from "../init.ts";
 
 const selectAll: SelectAppsFn = async (apps) => apps;
-import { getAppNames } from "../../utils/config.ts";
-import { isValidWorkspace } from "../../utils/workspace.ts";
+import { getAppNames } from "../../core/config.ts";
+import { isValidWorkspace } from "../../core/layout.ts";
 
 type TempDir = Awaited<ReturnType<typeof createTempDir>>;
 

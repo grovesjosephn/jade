@@ -1,5 +1,5 @@
 import { resolve, dirname, relative, sep } from "path";
-import { type FileSystemBackend, realFileSystemBackend } from "./fs-backend.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 
 /**
  * Find the workspace root by walking up from cwd looking for .bare directory

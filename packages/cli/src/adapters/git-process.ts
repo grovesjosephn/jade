@@ -7,7 +7,7 @@ export interface GitProcessResult {
 }
 
 /**
- * Injectable git subprocess runner. utils/git.ts is the only caller today —
+ * Injectable git subprocess runner. adapters/git.ts is the only caller today —
  * this exists to give it one place to invoke `git` and one typed failure
  * shape, instead of 20+ ad hoc `$` template calls.
  */

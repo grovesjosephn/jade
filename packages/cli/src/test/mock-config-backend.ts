@@ -1,5 +1,5 @@
-import type { ConfigBackend } from "../utils/config-backend.ts";
-import type { JadeConfig } from "../utils/config.ts";
+import type { ConfigBackend } from "../core/config-backend.ts";
+import type { JadeConfig } from "../core/config.ts";
 
 const DEFAULT_CONFIG: JadeConfig = {
   version: "1.0",
@@ -48,7 +48,7 @@ export function createMockConfigBackend(): MockConfigBackend {
 
     /**
      * Merge the patch into the existing (or default) config and store it,
-     * matching utils/config.ts's writeConfig merge semantics exactly.
+     * matching core/config.ts's writeConfig merge semantics exactly.
      */
     async writeConfig(workspaceRoot: string, patch: Partial<JadeConfig>): Promise<void> {
       record("writeConfig", workspaceRoot, patch);

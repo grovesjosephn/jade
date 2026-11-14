@@ -6,18 +6,18 @@ import {
   getCurrentGroup,
   getWorktreeGroupPath,
   listBareRepos,
-} from "../utils/workspace.ts";
-import { getAppNames } from "../utils/config.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
-import { type ConfigBackend, realConfigBackend } from "../utils/config-backend.ts";
-import { defaultRunHerdr, findWorkspaceByLabel, type HerdrRunner } from "../utils/herdr.ts";
+} from "../core/layout.ts";
+import { getAppNames } from "../core/config.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
+import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
+import { defaultRunHerdr, findWorkspaceByLabel, type HerdrRunner } from "../adapters/herdr.ts";
 import {
   defaultRunTmux,
   defaultAttachTmux,
   tmuxSessionExists,
   type TmuxRunner,
   type TmuxAttacher,
-} from "../utils/tmux.ts";
+} from "../adapters/tmux.ts";
 
 export type { HerdrRunner, TmuxRunner, TmuxAttacher };
 

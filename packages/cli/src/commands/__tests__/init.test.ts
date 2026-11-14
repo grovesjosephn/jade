@@ -1,6 +1,6 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { join } from "path";
-import { isValidWorkspace } from "../../utils/workspace.ts";
+import { isValidWorkspace } from "../../core/layout.ts";
 import { makeInitCommand } from "../init.ts";
 import { createTempDir, expectsExit } from "../../test/helpers.ts";
 import { createMockFileSystemBackend } from "../../test/mock-filesystem-backend.ts";

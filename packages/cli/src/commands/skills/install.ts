@@ -1,14 +1,14 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { homedir } from "os";
-import { bundledSkillPackages } from "../bundled-skills/registry.ts";
+import { bundledSkillPackages } from "../../bundled-skills/registry.ts";
 import {
   installBundledSkillPackages,
   resolveSkillsInstallTargets,
   SKILLS_INSTALL_DEST_SEGMENTS,
   type SkillsInstallTargetArg,
-} from "../utils/install-skills.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
+} from "../../bundled-skills/install.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs-backend.ts";
 
 const VALID_TARGETS = new Set<SkillsInstallTargetArg>(["cursor", "claude", "all"]);
 const VALID_SCOPES = new Set(["project", "user"]);
@@ -79,17 +79,3 @@ export function makeSkillsInstallCommand(fs: FileSystemBackend = realFileSystemB
     },
   });
 }
-
-export function makeSkillsCommand(fs: FileSystemBackend = realFileSystemBackend) {
-  return defineCommand({
-    meta: {
-      name: "skills",
-      description: "Install agent skills bundled with jade (Cursor, Claude Code, or both)",
-    },
-    subCommands: {
-      install: makeSkillsInstallCommand(fs),
-    },
-  });
-}
-
-export default makeSkillsCommand();

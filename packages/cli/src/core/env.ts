@@ -1,6 +1,6 @@
 import { resolve } from "path";
-import { getWorktreeGroupPath } from "./workspace.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "./fs-backend.ts";
+import { getWorktreeGroupPath } from "./layout.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 
 export function getEnvDirPath(workspaceRoot: string): string {
   return resolve(workspaceRoot, ".env");

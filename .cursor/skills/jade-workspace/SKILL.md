@@ -30,7 +30,7 @@ Paths are relative to the **workspace root** (the directory that contains `.bare
       <app>/             # worktree; branch typically matches <name>
 ```
 
-The project README sometimes shows feature folders at the root; in code, **every non-`main` group is under `workspace/<name>/`** (`getWorktreeGroupPath` in `packages/cli/src/utils/workspace.ts`).
+The project README sometimes shows feature folders at the root; in code, **every non-`main` group is under `workspace/<name>/`** (`getWorktreeGroupPath` in `packages/cli/src/core/layout.ts`).
 
 ## Discovery
 

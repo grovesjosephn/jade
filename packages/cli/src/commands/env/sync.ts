@@ -1,9 +1,9 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "@clack/prompts";
-import { findWorkspaceRoot, listBareRepos, listWorktreeDirs } from "../utils/workspace.ts";
-import { getEnvDirPath, syncEnvToGroup } from "../utils/env.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
+import { findWorkspaceRoot, listBareRepos, listWorktreeDirs } from "../../core/layout.ts";
+import { getEnvDirPath, syncEnvToGroup } from "../../core/env.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs-backend.ts";
 
 export function makeEnvSyncCommand(fs: FileSystemBackend = realFileSystemBackend) {
   return defineCommand({
@@ -73,15 +73,3 @@ export function makeEnvSyncCommand(fs: FileSystemBackend = realFileSystemBackend
 }
 
 export const syncCommand = makeEnvSyncCommand();
-
-const envCommand = defineCommand({
-  meta: {
-    name: "env",
-    description: "Manage environment files",
-  },
-  subCommands: {
-    sync: syncCommand,
-  },
-});
-
-export default envCommand;
