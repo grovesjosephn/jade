@@ -13,7 +13,7 @@ import { addAppToConfig } from "../core/config.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
-import { readGroupMeta, writeGroupMeta } from "../core/group-meta.ts";
+import { recordAppBranch } from "../core/group-meta.ts";
 import { runGh as defaultRunGh, type GhRunner } from "../adapters/gh.ts";
 import { publishApp } from "../core/publish.ts";
 
@@ -135,12 +135,9 @@ export function makeCreateCommand(
         try {
           const actual = await git.worktreeAdd(bareRepoPath, resolve(groupPath, appName), group);
           // A review group lists the apps it expects; record the new one so
-          // status and doctor don't treat it as stray.
-          const meta = await readGroupMeta(groupPath, fs);
-          if (meta && actual) {
-            meta.branches[appName] = actual;
-            await writeGroupMeta(groupPath, meta, fs);
-          }
+          // status and doctor don't treat it as stray. In a plain group a
+          // uniquified branch stays reported as drift.
+          if (actual) await recordAppBranch(groupPath, group, appName, actual, fs);
           log.success(`Added to workspace/${group}/ on '${actual}'`);
         } catch (error) {
           log.warn(`Could not add to workspace/${group}/: ${error}`);

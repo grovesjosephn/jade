@@ -6,6 +6,7 @@ import {
   getAppEnvSourcePath,
   copyEnvToWorktree,
   syncEnvToGroup,
+  adoptEnv,
 } from "../env.ts";
 import { createTempDir } from "../../test/helpers.ts";
 
@@ -136,5 +137,30 @@ describe("syncEnvToGroup", () => {
 
     expect(result.copied).toEqual(["feat/app"]);
     expect(await Bun.file(join(ws, "workspace", "feat", "app", ".env")).text()).toBe("X=42\n");
+  });
+});
+
+describe("adoptEnv", () => {
+  let tempDir: Awaited<ReturnType<typeof createTempDir>>;
+
+  afterEach(async () => {
+    if (tempDir) await tempDir.cleanup();
+  });
+
+  test("stores the source's .env when the app has none, and never overwrites one", async () => {
+    tempDir = await createTempDir();
+    const ws = join(tempDir.path, "ws");
+    const src = join(tempDir.path, "src");
+    await mkdir(src, { recursive: true });
+
+    expect(await adoptEnv(ws, "app", src)).toBe(false); // source has no .env
+
+    await Bun.write(join(src, ".env"), "A=1\n");
+    expect(await adoptEnv(ws, "app", src)).toBe(true);
+    expect(await Bun.file(getAppEnvSourcePath(ws, "app")).text()).toBe("A=1\n");
+
+    await Bun.write(join(src, ".env"), "A=2\n");
+    expect(await adoptEnv(ws, "app", src)).toBe(false);
+    expect(await Bun.file(getAppEnvSourcePath(ws, "app")).text()).toBe("A=1\n");
   });
 });

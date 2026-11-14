@@ -1,4 +1,4 @@
-import { resolve } from "path";
+import { dirname, resolve } from "path";
 import { getWorktreeGroupPath } from "./layout.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 
@@ -21,6 +21,24 @@ export async function copyEnvToWorktree(
 
   const destPath = resolve(worktreePath, ".env");
   await fs.copyFile(sourcePath, destPath);
+  return true;
+}
+
+/**
+ * Make `sourceDir/.env` the app's stored .env (the one copied into new
+ * worktrees), unless the app already has one. Returns whether it stored it.
+ */
+export async function adoptEnv(
+  workspaceRoot: string,
+  appName: string,
+  sourceDir: string,
+  fs: FileSystemBackend = realFileSystemBackend
+): Promise<boolean> {
+  const store = getAppEnvSourcePath(workspaceRoot, appName);
+  const source = resolve(sourceDir, ".env");
+  if ((await fs.pathExists(store)) || !(await fs.pathExists(source))) return false;
+  await fs.mkdirp(dirname(store));
+  await fs.copyFile(source, store);
   return true;
 }
 

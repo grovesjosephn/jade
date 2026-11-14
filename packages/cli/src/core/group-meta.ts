@@ -66,3 +66,30 @@ export function expectedBranch(groupName: string, appName: string, meta: GroupMe
   if (!meta) return groupName;
   return meta.branches[appName] ?? null;
 }
+
+/**
+ * Record that `appName` belongs on `branch` in this group, where status and
+ * doctor will look for it:
+ *
+ * - "recorded": the group has metadata, and now lists the app on `branch`.
+ * - "default": no metadata, and `branch` is the group's name, which is what a
+ *   group without metadata expects anyway. Nothing written.
+ * - "mismatch": no metadata, and `branch` differs from the group's name.
+ *   Nothing written; status will report the app as drifted unless the caller
+ *   writes metadata for the group itself.
+ */
+export async function recordAppBranch(
+  groupPath: string,
+  groupName: string,
+  appName: string,
+  branch: string,
+  fs: FileSystemBackend = realFileSystemBackend
+): Promise<"recorded" | "default" | "mismatch"> {
+  const meta = await readGroupMeta(groupPath, fs);
+  if (meta) {
+    meta.branches[appName] = branch;
+    await writeGroupMeta(groupPath, meta, fs);
+    return "recorded";
+  }
+  return branch === groupName ? "default" : "mismatch";
+}

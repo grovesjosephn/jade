@@ -3,8 +3,8 @@ import { basename, relative, resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "@clack/prompts";
 import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, isUsableName } from "../core/layout.ts";
 import { addAppToConfig } from "../core/config.ts";
-import { copyEnvToWorktree, getAppEnvSourcePath } from "../core/env.ts";
-import { readGroupMeta, writeGroupMeta } from "../core/group-meta.ts";
+import { adoptEnv, copyEnvToWorktree } from "../core/env.ts";
+import { readGroupMeta, recordAppBranch, writeGroupMeta } from "../core/group-meta.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
 import type { CarriedWork, ImportSource } from "../adapters/git-import.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
@@ -233,21 +233,16 @@ export function makeImportCommand(
       await addAppToConfig(config, workspaceRoot, appName, defaultBranch === "main" ? undefined : defaultBranch);
 
       if (plan.group && groupPath) {
-        if (groupMeta) {
-          groupMeta.branches[appName] = plan.branch;
-          await writeGroupMeta(groupPath, groupMeta, fs);
-        } else if (plan.branch !== plan.group) {
+        // Only a group made by this import can get here with a mismatch: an
+        // existing plain group was refused above.
+        const recorded = await recordAppBranch(groupPath, plan.group, appName, plan.branch, fs);
+        if (recorded === "mismatch") {
           await writeGroupMeta(groupPath, { kind: "import", branches: { [appName]: plan.branch } }, fs);
         }
       }
 
-      // .env is gitignored, so it isn't part of the carried work. Make the
-      // source's the app's stored .env (unless there is one) and hand it out.
-      const envStore = getAppEnvSourcePath(workspaceRoot, appName);
-      const sourceEnv = resolve(source.root, ".env");
-      if (!(await fs.pathExists(envStore)) && (await fs.pathExists(sourceEnv))) {
-        await fs.mkdirp(resolve(envStore, ".."));
-        await fs.copyFile(sourceEnv, envStore);
+      // .env is gitignored, so it isn't part of the carried work.
+      if (await adoptEnv(workspaceRoot, appName, source.root, fs)) {
         log.success(`Stored ${appName}'s .env in .env/${appName}/`);
       }
       for (const path of [mainPath, groupAppPath]) {
