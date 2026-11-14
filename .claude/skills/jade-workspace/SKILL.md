@@ -42,7 +42,10 @@ Commands resolve the workspace root by **walking up from cwd** until a `.bare/` 
 |--------|---------|
 | `jade init <path> [--orgUrl <url>]` | Create `.bare/`, `main/`, `workspace/`, and `jade.json`. |
 | `jade add <repo-or-url> [--name <app>] [-b branch] [-w path]` | Bare-clone app into `.bare/<app>`, then add a worktree in **`main/<app>` only** (default branch). Existing feature groups are not touched; backfill with `jade workspace add <group> --apps <app>`. |
-| `jade import <path> [--name <app>] [-b branch] [-g group]` | Bring an **existing local clone** into jade: `.bare/<app>` gets its branches, tags and `origin/*` refs (origin URL kept; no origin means local-only, like `jade create`), `main/<app>` sits on the default branch, and the checked-out branch plus **all uncommitted work** (staged, unstaged, untracked; `.env` too) goes to `workspace/<group>/<app>`. Group defaults to the branch name (`/` becomes `-`, recorded in `.jade-group.json`). Dirty work on the default branch or a detached HEAD needs `-g <name>` and goes on a new branch `<name>`. The source is never modified; delete it yourself once the import checks out. |
+| `jade import <path> [--name <app>] [-b branch] [-g group]` | Bring an **existing local clone** into jade: `.bare/<app>` gets its branches, tags and `origin/*` refs (origin URL kept; no origin means local-only, like `jade create`), `main/<app>` sits on the default branch, and the checked-out branch plus **all uncommitted work** (staged, unstaged, untracked; `.env` too) goes to `workspace/<group>/<app>`. Group defaults to the branch name (`/` becomes `-`, recorded in `.jade-group.json`). Dirty work on the default branch or a detached HEAD needs `-g <name>` and goes on a new branch `<name>`. Every remote is kept with its URLs and refs. The source is never modified; the import ends by listing anything only the source has. |
+| `jade import <path> [--name <app>] --check` | Don't import: compare a source with its existing import. Lists **blockers** (refs, stashes, uncommitted files, nested repos, submodule work or linked worktrees the import lacks) and **notes** (ignored files with sizes, hooks, per-repo git config, remotes that differ). Exits 1 on any blocker. `--name` is needed when the folder name isn't the app name. |
+| `jade import <path> [--name <app>] --remove-source` | Rerun the check and delete the source only if there are no blockers. Notes don't block, so read them first. |
+| `jade import … --json` | Any import mode as one JSON object: `mode`, paths (`source`, `bare`, `main`, `group`), `carried`, `remotes`, `published`, `safeToRemove`, `blockers`, `notes`, the raw `check`, `removed`, and `next` (commands to run next). Errors go to stderr as `{"error":{"message":...}}`. |
 | `jade create <name> [-b branch] [--groups a,b\|all\|none] [--remote]` | Start a **new** repo locally: `.bare/<name>`, `main/<name>` with an empty first commit, and a jade.json entry. Also added to the current feature group (or `--groups`). No remote until `jade publish`. |
 | `jade publish <app> [--url <url>] [--public] [--all-branches]` | Create the remote for a local-only app (`gh repo create` under `orgUrl`, or an existing empty repo via `--url`), push the default branch, and set up tracking. |
 | `jade status [<group>] [--root] [--json] [-w path]` | **Contextual — output shape depends on cwd.** See "Reading `jade status`" below. |
@@ -88,11 +91,31 @@ Cost: root view is a pure directory scan; the text workspace view is one git cal
 
 ## Agent workflow
 
+When output isn't a terminal (as when an agent runs jade), it's plain lines tagged `ok`, `info`, `warn`, `error`, `done` or `-`, with errors on stderr. Prefer `--json` where a command has it (`status`, `doctor`, `workspace list`, `import`). Commands that would prompt need their flags instead, for example `jade workspace add <name> -a` or `--apps a,b`.
+
 1. Run **`jade status --root`** (or **`jade status --root -w <workspace-root>`**) for root, version, org, and group names.
 2. Run **`jade status <group>`** to see one group's apps and branches; add **`--json`** when you need dirty state, `.env` gaps, missing apps, or fix commands. Prefer it over **`jade workspace list`** when you care about *one* group; `jade workspace list` remains the way to see branches across *all* groups at once.
 3. Treat **"workspace"** in Jade as a **group**: either **`main/`** or **`workspace/<name>/`**.
 4. Edit and run git **inside** `main/<app>/` or `workspace/<name>/<app>/`, not inside `.bare/`.
 5. After **`jade workspace add`**, run **`jade status <name>`** — it flags a uniquified branch as `[drift]`; `jade doctor <name> --dry-run` shows the fix, and `jade doctor <name>` applies it.
+
+## Migrating an existing project
+
+Use this checklist whenever a project already exists on disk, whatever shape it's in.
+
+1. **Look at the source before touching it.** Note its current branch, uncommitted work, stashes, other worktrees, submodules, nested repos, remotes beyond `origin`, and any merge or rebase in progress. Also find terminals, editors or agents whose working folder is inside it (`hc ls` in herdr), because those will need to move.
+2. **Get it into an importable shape.** Stop and ask the user when this would change the source:
+   - Not a git repo, or a repo with no commits: `jade import` refuses it. Ask before running `git init` or making a first commit. Commit with the identity the user's other repos use, and check that `.gitignore` keeps out secrets and build output.
+   - A merge, rebase, cherry-pick or bisect in progress: ask the user to finish or abort it.
+   - Inside the jade root (but not under `.bare/`, `main/` or `workspace/`): import refuses it, so move it outside the root first.
+   - A linked worktree: import the main checkout instead.
+3. **Choose where the work goes.** The checked-out branch and its uncommitted work go to `workspace/<branch>/`. Work on the default branch or a detached HEAD needs `-g <name>`. Pass `--name` when the folder name isn't the app name you want.
+4. **Import:** `jade import <path> [--name <app>] [-g <group>] --json`. Read `blockers`, `notes` and `next` in the result: they already list what only the source has.
+5. **Rebuild in the new worktree.** Ignored files aren't copied, so install dependencies and build following the project's own README, Makefile or package scripts, then run its tests. If something fails, run the same step in the source too, so you can tell whether the import caused it.
+6. **Check:** `jade import <path> [--name <app>] --check --json`. Each blocker is data only the source has. Deal with it (push or import the branch, apply or export the stash, move the nested repo) and check again. Don't delete around a blocker.
+7. **Review the notes with the user.** Ignored files are usually `node_modules` and build output, but they can also hold hand-made logs, local config or data. Ask before losing anything that isn't clearly regenerable. Recreate any hooks or per-repo config (`user.*`, LFS settings) the user wants.
+8. **Remove the source:** `jade import <path> [--name <app>] --remove-source`. Never `rm -rf` it yourself.
+9. **Repoint anything that used the old path.** That includes shells, editor workspaces, scripts and herdr spaces (`cd` their terminals into `main/<app>` or `workspace/<group>/<app>`).
 
 ## Pitfalls
 

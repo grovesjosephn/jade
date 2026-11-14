@@ -1,6 +1,6 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { intro, outro, cancel, log, spinner } from "@clack/prompts";
+import { intro, outro, cancel, log, spinner } from "../adapters/ui.ts";
 import {
   findWorkspaceRoot,
   getBarePath,

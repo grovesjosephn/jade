@@ -1,6 +1,6 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { intro, outro, cancel, log } from "@clack/prompts";
+import { intro, outro, cancel, log, setJsonMode } from "../../adapters/ui.ts";
 import { findWorkspaceRoot, getWorktreeGroupPath, listBareRepos, listWorktreeDirs } from "../../core/layout.ts";
 import { type GitBackend, realGitBackend } from "../../adapters/git-backend.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs-backend.ts";
@@ -28,6 +28,7 @@ export function makeWorkspaceListCommand(
     },
     async run({ args }) {
       const asJson = args.json as boolean;
+      setJsonMode(asJson);
       if (!asJson) intro(`Workspaces`);
 
       const workspaceRoot = args.workspace

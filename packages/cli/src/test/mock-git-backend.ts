@@ -1,7 +1,7 @@
 import { mkdir, rm } from "fs/promises";
 import { join } from "path";
 import type { GitBackend, WorktreeAddOptions, WorktreeInfo, WorktreeStatus } from "../adapters/git-backend.ts";
-import type { ImportSource } from "../adapters/git-import.ts";
+import type { ImportSource, SourceRemote } from "../adapters/git-import.ts";
 
 /**
  * In-memory state that the mock backend tracks per bare repo path.
@@ -323,8 +323,9 @@ export function createMockGitBackend(): MockGitBackend {
     },
 
     /** Simulate `jade import`'s bare repo: the source's branches, no worktrees yet. */
-    async importBare(sourceRoot: string, bareRepoPath: string, defaultBranch: string, originUrl: string | null) {
-      record("importBare", sourceRoot, bareRepoPath, defaultBranch, originUrl);
+    async importBare(sourceRoot: string, bareRepoPath: string, defaultBranch: string, remotes: SourceRemote[]) {
+      record("importBare", sourceRoot, bareRepoPath, defaultBranch, remotes);
+      const originUrl = remotes.find((r) => r.name === "origin")?.url ?? null;
       await mkdir(bareRepoPath, { recursive: true });
       await Bun.write(join(bareRepoPath, "HEAD"), `ref: refs/heads/${defaultBranch}\n`);
       states.set(
@@ -341,6 +342,22 @@ export function createMockGitBackend(): MockGitBackend {
     async carryWork(sourceRoot: string, bareRepoPath: string, worktreePath: string) {
       record("carryWork", sourceRoot, bareRepoPath, worktreePath);
       return { tracked: sourceByRoot(sourceRoot)?.dirty ?? false, untracked: [], skipped: [] };
+    },
+
+    async checkImport(sourceRoot: string, bareRepoPath: string) {
+      record("checkImport", sourceRoot, bareRepoPath);
+      return {
+        missingRefs: [],
+        stashCount: sourceByRoot(sourceRoot)?.stashCount ?? 0,
+        linkedWorktrees: sourceByRoot(sourceRoot)?.linkedWorktrees ?? [],
+        nestedRepos: [],
+        submodules: [],
+        unsavedFiles: [],
+        remotes: [],
+        ignored: [],
+        hooks: [],
+        config: [],
+      };
     },
   };
 

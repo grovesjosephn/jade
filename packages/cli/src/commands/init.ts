@@ -1,6 +1,6 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { intro, outro, cancel, log } from "@clack/prompts";
+import { intro, outro, cancel, log } from "../adapters/ui.ts";
 import { getBarePath, getMainWorktreePath, getWorktreeContainerPath } from "../core/layout.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";

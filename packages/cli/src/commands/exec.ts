@@ -1,6 +1,6 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { cancel, log } from "@clack/prompts";
+import { cancel, log } from "../adapters/ui.ts";
 import { findWorkspaceRoot, getCurrentGroup, listWorktreeDirs } from "../core/layout.ts";
 import { resolveGroup } from "../core/group.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";

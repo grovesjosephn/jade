@@ -1,6 +1,7 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { intro, outro, cancel, log, spinner, multiselect, isCancel } from "@clack/prompts";
+import { multiselect, isCancel } from "@clack/prompts";
+import { intro, outro, cancel, log, spinner, canPrompt } from "../../adapters/ui.ts";
 import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, listBareRepos } from "../../core/layout.ts";
 import { type GitBackend, realGitBackend } from "../../adapters/git-backend.ts";
 import { copyEnvToWorktree } from "../../core/env.ts";
@@ -8,12 +9,18 @@ import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs
 
 export type SelectAppsFn = (apps: string[]) => Promise<string[] | symbol>;
 
-const defaultSelectApps: SelectAppsFn = (apps) =>
-  multiselect({
+const defaultSelectApps: SelectAppsFn = (apps) => {
+  if (!canPrompt()) {
+    // Nothing chosen: the caller cleans up and aborts as for an empty pick.
+    log.error(`No terminal to pick apps in; pass -a for every app, or --apps ${apps.slice(0, 2).join(",") || "app1,app2"}`);
+    return Promise.resolve([]);
+  }
+  return multiselect({
     message: "Select apps to add to this workspace",
     options: apps.map((a) => ({ value: a, label: a })),
     required: true,
   }) as Promise<string[] | symbol>;
+};
 
 async function resolveSelectedApps(
   bareRepos: string[],

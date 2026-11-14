@@ -1,6 +1,6 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { intro, outro, cancel, log } from "@clack/prompts";
+import { intro, outro, cancel, log, setJsonMode } from "../adapters/ui.ts";
 import { findWorkspaceRoot, getBarePath, getCurrentGroup, listWorktreeDirs } from "../core/layout.ts";
 import { resolveGroup, type ResolvedGroup } from "../core/group.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
@@ -203,6 +203,7 @@ export function makeDoctorCommand(
       const opts = { dryRun: args.dryRun as boolean, addMissing: args.addMissing as boolean };
       const jadeConfig = await config.readConfig(workspaceRoot);
 
+      setJsonMode(asJson);
       if (!asJson) intro(opts.dryRun ? `jade doctor (dry run)` : `jade doctor`);
 
       const entries: DoctorEntry[] = [];

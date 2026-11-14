@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from "fs";
 import { $ } from "bun";
 import { makeImportCommand, planImport, toGroupName } from "../import.ts";
 import initCommand from "../init.ts";
-import { createTempDir, expectsExit, type TempDir } from "../../test/helpers.ts";
+import { createTempDir, expectsExit, withCapturedConsole, type TempDir } from "../../test/helpers.ts";
 import { realConfigBackend } from "../../core/config-backend.ts";
 import { getAppNames } from "../../core/config.ts";
 import { readGroupMeta } from "../../core/group-meta.ts";
@@ -12,6 +12,8 @@ import { resolveGroup } from "../../core/group.ts";
 import { buildAttention, collectApps } from "../../core/health.ts";
 import { realGitBackend } from "../../adapters/git-backend.ts";
 import { realFileSystemBackend } from "../../adapters/fs-backend.ts";
+import { gitCheckImport } from "../../adapters/git-import.ts";
+import { importBlockers } from "../../core/import-check.ts";
 
 describe("planImport", () => {
   test("a feature branch gets a group named after it", () => {
@@ -236,5 +238,202 @@ describe("jade import", () => {
     await initCommand.run!({ args: { path: inner } } as any);
     await expectsExit(() => makeImportCommand().run!({ args: { path: outer, workspace: inner } } as any));
     expect(existsSync(join(inner, ".bare", "outer"))).toBe(false);
+  });
+  test("keeps every remote: URLs, push URLs, remote-tracking refs and <remote>/HEAD", async () => {
+    const { src } = await sourceClone();
+    // A second remote with its own branch and HEAD, reached by a relative path
+    const fork = join(tmp.path, "fork");
+    await $`git clone -q --bare ${join(tmp.path, "upstream")} ${fork}`.quiet();
+    await $`git --git-dir=${fork} branch side main`.quiet();
+    await git(src, "remote", "add", "upstream", "../fork");
+    await git(src, "fetch", "-q", "upstream");
+    await git(src, "remote", "set-head", "upstream", "main");
+    await git(src, "remote", "set-url", "--push", "origin", "git@example.com:me/app.git");
+
+    await run({ path: src });
+    const bare = join(root, ".bare", "app");
+    expect((await git(bare, "remote")).split("\n").sort()).toEqual(["origin", "upstream"]);
+    expect(await git(bare, "remote", "get-url", "upstream")).toBe(fork);
+    expect(await git(bare, "remote", "get-url", "--push", "origin")).toBe("git@example.com:me/app.git");
+    expect(await git(bare, "rev-parse", "refs/remotes/upstream/side")).toBe(await git(src, "rev-parse", "upstream/side"));
+    expect(await git(bare, "symbolic-ref", "refs/remotes/upstream/HEAD")).toBe("refs/remotes/upstream/main");
+    expect(await git(bare, "config", "remote.upstream.fetch")).toBe("+refs/heads/*:refs/remotes/upstream/*");
+  });
+
+  describe("--json", () => {
+    /** Run with --json and parse stdout, which must be exactly one JSON object */
+    const runJson = async (args: Record<string, unknown>) => {
+      const lines = await withCapturedConsole(() => run({ ...args, json: true }));
+      expect(lines).toHaveLength(1);
+      return JSON.parse(lines[0]!);
+    };
+
+    test("an import prints one object: paths, group, carried work, remotes, check and next steps", async () => {
+      const { src } = await sourceClone();
+      await git(src, "checkout", "-qb", "feature/login");
+      await Bun.write(join(src, "a.txt"), "dirty\n");
+      await Bun.write(join(src, "ignored/x"), "x");
+      const out = await runJson({ path: src });
+      expect(out).toMatchObject({
+        mode: "import",
+        app: "app",
+        main: { path: join(root, "main", "app"), branch: "main" },
+        group: { name: "feature-login", branch: "feature/login", newBranch: false },
+        carried: { tracked: true, untracked: [] },
+        remotes: ["origin"],
+        published: true,
+        safeToRemove: true,
+        blockers: [],
+      });
+      expect(out.check.ignored.map((e: { path: string }) => e.path)).toEqual(["ignored/"]);
+      expect(out.next).toEqual([
+        `cd ${join(root, "workspace", "feature-login", "app")}`,
+        `jade import ${src} --name app --remove-source`,
+      ]);
+    });
+
+    test("--check with blockers prints the object, then exits 1; --remove-source reports removed", async () => {
+      const { src } = await sourceClone();
+      await run({ path: src });
+      await Bun.write(join(src, "b.txt"), "stash me\n");
+      await git(src, "stash", "-q");
+
+      const lines = await withCapturedConsole(() => expectsExit(() => run({ path: src, check: true, json: true })));
+      expect(lines).toHaveLength(1);
+      let out = JSON.parse(lines[0]!);
+      expect(out).toMatchObject({ mode: "check", safeToRemove: false, removed: false, next: [] });
+      expect(out.blockers).toEqual(["1 stash entry"]);
+
+      await git(src, "stash", "drop", "-q");
+      out = await runJson({ path: src, "remove-source": true });
+      expect(out).toMatchObject({ mode: "remove-source", safeToRemove: true, removed: true });
+      expect(existsSync(src)).toBe(false);
+    });
+
+    test("errors go to stderr as JSON, leaving stdout empty", async () => {
+      const errors: string[] = [];
+      const origError = console.error;
+      console.error = (...a: unknown[]) => errors.push(a.map(String).join(" "));
+      let lines: string[] = [];
+      try {
+        await expectsExit(async () => {
+          lines = await withCapturedConsole(() => run({ path: join(tmp.path, "nowhere"), json: true }));
+        });
+      } finally {
+        console.error = origError;
+      }
+      expect(lines).toEqual([]);
+      expect(JSON.parse(errors[0]!).error.message).toContain("isn't inside a git working copy");
+    });
+  });
+
+  describe("--check and --remove-source", () => {
+    const check = (src: string) => gitCheckImport(src, join(root, ".bare", "app"));
+
+    test("a fresh import loses nothing; --remove-source deletes the source", async () => {
+      const { src } = await sourceClone();
+      await git(src, "checkout", "-qb", "login");
+      await Bun.write(join(src, "a.txt"), "dirty\n");
+      await Bun.write(join(src, "new.txt"), "untracked\n");
+      await Bun.write(join(src, "ignored/big.bin"), "x");
+      await Bun.write(join(src, ".git/hooks/pre-commit"), "#!/bin/sh\n");
+      await git(src, "config", "user.name", "Someone");
+      await run({ path: src });
+
+      const c = await check(src);
+      expect(importBlockers(c)).toEqual([]);
+      expect(c.ignored.map((e) => e.path)).toEqual(["ignored/"]);
+      expect(c.hooks).toEqual(["pre-commit"]);
+      expect(c.config).toEqual(["user.name"]);
+
+      await run({ path: src, check: true });
+      await run({ path: src, "remove-source": true });
+      expect(existsSync(src)).toBe(false);
+    });
+
+    test("work committed in the import after carrying it still counts", async () => {
+      const { src } = await sourceClone();
+      await git(src, "checkout", "-qb", "login");
+      await Bun.write(join(src, "a.txt"), "dirty\n");
+      await Bun.write(join(src, "new.txt"), "untracked\n");
+      await run({ path: src });
+      const group = join(root, "workspace", "login", "app");
+      await git(group, "add", ".");
+      await git(group, "commit", "-qm", "carried work");
+      await Bun.write(join(group, "a.txt"), "edited again\n");
+      expect(importBlockers(await check(src))).toEqual([]);
+    });
+
+    test("blocks on a branch, stash, nested repo or file the import doesn't have", async () => {
+      const { src } = await sourceClone();
+      await run({ path: src });
+      expect(importBlockers(await check(src))).toEqual([]);
+
+      await git(src, "checkout", "-qb", "later");
+      await Bun.write(join(src, "a.txt"), "later\n");
+      await git(src, "commit", "-qam", "after the import");
+      await Bun.write(join(src, "b.txt"), "stashed\n");
+      await git(src, "stash", "-q");
+      await $`git init -q ${join(src, "nested")}`.quiet();
+      await Bun.write(join(src, "fresh.txt"), "only here\n");
+
+      const c = await check(src);
+      expect(c.missingRefs).toEqual(["later"]);
+      expect(c.stashCount).toBe(1);
+      expect(c.nestedRepos).toEqual(["nested/"]);
+      expect(c.unsavedFiles).toEqual(["fresh.txt"]);
+
+      await expectsExit(() => run({ path: src, check: true }));
+      await expectsExit(() => run({ path: src, "remove-source": true }));
+      expect(existsSync(src)).toBe(true);
+    });
+
+    test("a branch deleted in the import blocks, even though its objects remain", async () => {
+      const { src } = await sourceClone();
+      await git(src, "branch", "spare");
+      await git(src, "checkout", "-q", "spare");
+      await Bun.write(join(src, "a.txt"), "spare\n");
+      await git(src, "commit", "-qam", "only on spare");
+      await git(src, "checkout", "-q", "main");
+      await run({ path: src });
+      expect(importBlockers(await check(src))).toEqual([]);
+      await git(join(root, ".bare", "app"), "branch", "-D", "spare");
+      expect((await check(src)).missingRefs).toEqual(["spare"]);
+    });
+
+    test("blocks on linked worktrees, a detached HEAD the import lacks, and submodule work", async () => {
+      const { src } = await sourceClone();
+      // A submodule whose checkout has a commit no remote has
+      const lib = join(tmp.path, "lib");
+      await $`git init -q -b main ${lib}`.quiet();
+      await Bun.write(join(lib, "l.txt"), "l\n");
+      await git(lib, "add", ".");
+      await git(lib, "commit", "-qm", "lib");
+      await git(src, "-c", "protocol.file.allow=always", "submodule", "add", "-q", lib, "lib");
+      await git(src, "commit", "-qm", "add lib");
+      await run({ path: src });
+      expect(importBlockers(await check(src))).toEqual([]);
+
+      await Bun.write(join(src, "lib", "l.txt"), "local\n");
+      await git(join(src, "lib"), "commit", "-qam", "local only");
+      await git(src, "worktree", "add", "-q", "--detach", join(tmp.path, "side"));
+      await git(src, "checkout", "-q", "--detach");
+      await Bun.write(join(src, "a.txt"), "detached\n");
+      await git(src, "commit", "-qam", "detached work");
+
+      const c = await check(src);
+      expect(c.submodules).toEqual(["lib (commits on no remote)"]);
+      expect(c.linkedWorktrees).toEqual([join(tmp.path, "side")]);
+      expect(c.missingRefs.some((r) => r.startsWith("HEAD (detached"))).toBe(true);
+      // The source's submodule pointer changed too, so lib shows as modified
+      expect(c.unsavedFiles).toEqual([]);
+    });
+
+    test("a renamed source needs --name to find its app", async () => {
+      const { src } = await sourceClone("app.old");
+      await run({ path: src, name: "app" });
+      await expectsExit(() => run({ path: src, check: true }));
+      await run({ path: src, name: "app", check: true });
+    });
   });
 });

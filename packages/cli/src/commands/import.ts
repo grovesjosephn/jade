@@ -1,12 +1,13 @@
 import { defineCommand } from "citty";
 import { basename, relative, resolve } from "path";
-import { intro, outro, cancel, log, spinner } from "@clack/prompts";
+import { intro, outro, cancel, log, spinner, setJsonMode } from "../adapters/ui.ts";
 import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, isUsableName } from "../core/layout.ts";
 import { addAppToConfig } from "../core/config.ts";
 import { adoptEnv, copyEnvToWorktree } from "../core/env.ts";
 import { readGroupMeta, recordAppBranch, writeGroupMeta } from "../core/group-meta.ts";
+import { importBlockers, importNotes } from "../core/import-check.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
-import type { CarriedWork, ImportSource } from "../adapters/git-import.ts";
+import { type CarriedWork, type ImportCheck, type ImportSource, originOf } from "../adapters/git-import.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
 
@@ -71,6 +72,22 @@ export function planImport(
   return { group: null };
 }
 
+/** The comparison part of `jade import --json` output, shared by every mode */
+function checkJson(check: ImportCheck) {
+  const blockers = importBlockers(check);
+  return { safeToRemove: blockers.length === 0, blockers, notes: importNotes(check), check };
+}
+
+const removeCommand = (source: string, app: string) => `jade import ${source} --name ${app} --remove-source`;
+
+/** Print a check's blockers and notes; returns whether the source is safe to delete */
+function reportCheck(check: ImportCheck): boolean {
+  const blockers = importBlockers(check);
+  for (const b of blockers) log.warn(`Only in the source: ${b}`);
+  for (const n of importNotes(check)) log.info(n);
+  return blockers.length === 0;
+}
+
 export function makeImportCommand(
   git: GitBackend = realGitBackend,
   fs: FileSystemBackend = realFileSystemBackend,
@@ -107,8 +124,23 @@ export function makeImportCommand(
         alias: "w",
         description: "Workspace root path",
       },
+      check: {
+        type: "boolean",
+        description:
+          "Don't import: compare <path> with its existing import and list what deleting it would lose (exits 1 if anything)",
+      },
+      "remove-source": {
+        type: "boolean",
+        description: "Don't import: run --check, and delete <path> only if nothing would be lost",
+      },
+      json: {
+        type: "boolean",
+        description: "Print the result as one JSON object instead of text; errors go to stderr as {\"error\":{...}}",
+      },
     },
     async run({ args }) {
+      const asJson = Boolean(args.json);
+      setJsonMode(asJson);
       const workspaceRoot = args.workspace
         ? resolve(args.workspace as string)
         : await findWorkspaceRoot(process.cwd(), fs);
@@ -133,12 +165,59 @@ export function makeImportCommand(
         cancel(`This jade workspace is inside ${source.root}; move one of them first`);
         process.exit(1);
       }
+      const appName = (args.name as string | undefined) ?? basename(source.root);
+
+      if (args.check || args["remove-source"]) {
+        const bare = resolve(getBarePath(workspaceRoot), appName);
+        if (!isUsableName(appName) || !(await fs.pathExists(bare))) {
+          cancel(`No app '${appName}' in .bare/ to compare ${source.root} with; pass --name <app>`);
+          process.exit(1);
+        }
+        intro(`Comparing ${source.root} with ${appName}`);
+        const check = await git.checkImport(source.root, bare);
+        const safe = reportCheck(check);
+        const removing = Boolean(args["remove-source"]);
+        if (asJson) {
+          if (removing && safe) await fs.remove(source.root);
+          console.log(
+            JSON.stringify({
+              mode: removing ? "remove-source" : "check",
+              app: appName,
+              source: source.root,
+              bare,
+              removed: removing && safe,
+              ...checkJson(check),
+              next: safe && !removing ? [removeCommand(source.root, appName)] : [],
+            })
+          );
+          if (!safe) process.exit(1);
+          return;
+        }
+        if (!safe) {
+          cancel(
+            args["remove-source"]
+              ? `Not removed: ${source.root} has work the import doesn't`
+              : `${source.root} has work the import doesn't; deleting it would lose it`
+          );
+          process.exit(1);
+        }
+        if (!args["remove-source"]) {
+          const what = importNotes(check).length > 0 ? "Only what's listed above, which jade never copies, is" : "Nothing is";
+          outro(
+            `${what} left only in ${source.root}. Delete it with: ${removeCommand(source.root, appName)}`
+          );
+          return;
+        }
+        await fs.remove(source.root);
+        outro(`Removed ${source.root}`);
+        return;
+      }
+
       if (source.problem) {
         cancel(`Can't import ${source.root}: ${source.problem}`);
         process.exit(1);
       }
 
-      const appName = (args.name as string | undefined) ?? basename(source.root);
       if (!isUsableName(appName)) {
         cancel(`'${appName}' isn't a usable app name (letters, digits, '.', '_' and '-'); pass --name`);
         process.exit(1);
@@ -196,7 +275,7 @@ export function makeImportCommand(
 
       try {
         s.start(`Copying branches and tags into .bare/${appName}`);
-        await git.importBare(source.root, bareRepoPath, defaultBranch, source.originUrl);
+        await git.importBare(source.root, bareRepoPath, defaultBranch, source.remotes);
 
         s.message(`Creating main/${appName}`);
         await fs.mkdirp(getWorktreeGroupPath(workspaceRoot, "main"));
@@ -261,29 +340,49 @@ export function makeImportCommand(
           carried.untracked.length > 0 ? `${carried.untracked.length} untracked file(s)` : null,
         ].filter(Boolean);
         if (parts.length > 0) log.success(`Moved ${parts.join(" and ")}`);
-        if (carried.skipped.length > 0) {
-          log.warn(`Not copied (nested repositories): ${carried.skipped.join(", ")}`);
-        }
       }
-      if (!source.originUrl) {
+      if (!originOf(source)) {
         log.info(`No origin remote: ${appName} is local only. Run 'jade publish ${appName}' when ready.`);
       }
       if (source.hasSubmodules) {
         log.warn(`Submodules aren't set up; run 'git submodule update --init' in each worktree`);
       }
-      if (source.stashCount > 0) {
-        log.warn(`${source.stashCount} stash entr${source.stashCount === 1 ? "y" : "ies"} in the source weren't copied`);
-      }
-      if (source.linkedWorktrees.length > 0) {
-        log.warn(
-          `The source has other worktrees, whose uncommitted work wasn't copied: ${source.linkedWorktrees.join(", ")}`
-        );
-      }
-      log.info(`Not copied: ignored files (node_modules, build output), hooks and per-repo git config.`);
 
+      // Same comparison as --check, so the source's leftovers are listed now.
+      const check = await git.checkImport(source.root, bareRepoPath);
+      const safe = reportCheck(check);
+      if (asJson) {
+        console.log(
+          JSON.stringify({
+            mode: "import",
+            app: appName,
+            source: source.root,
+            bare: bareRepoPath,
+            main: { path: mainPath, branch: defaultBranch },
+            group:
+              plan.group && groupAppPath
+                ? { name: plan.group, path: groupAppPath, branch: plan.branch, newBranch: plan.newBranch }
+                : null,
+            carried: carried && { tracked: carried.tracked, untracked: carried.untracked },
+            remotes: source.remotes.map((r) => r.name),
+            published: originOf(source) !== null,
+            submodules: source.hasSubmodules,
+            ...checkJson(check),
+            next: [
+              ...(groupAppPath ? [`cd ${groupAppPath}`] : []),
+              ...(originOf(source) ? [] : [`jade publish ${appName}`]),
+              ...(source.hasSubmodules ? ["git submodule update --init"] : []),
+              ...(safe ? [removeCommand(source.root, appName)] : []),
+            ],
+          })
+        );
+        return;
+      }
+      const next = plan.group ? `\nNext: cd workspace/${plan.group}/${appName}` : "";
       outro(
-        `${source.root} is unchanged. Once you've checked the import, you can delete it.` +
-          (plan.group ? ` Next: cd workspace/${plan.group}/${appName}` : "")
+        safe
+          ? `${source.root} is unchanged. Once the import builds, delete it with: ${removeCommand(source.root, appName)}${next}`
+          : `${source.root} is unchanged, and has work the import doesn't (listed above): keep it until that's dealt with.${next}`
       );
     },
   });

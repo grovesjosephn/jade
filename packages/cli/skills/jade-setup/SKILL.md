@@ -89,7 +89,16 @@ jade import ~/code/frontend            # branch + uncommitted work → workspace
 jade import ~/code/backend -g wip      # needed when the work is on the default branch
 ```
 
-The original directory isn't changed; delete it once the import looks right.
+The original directory isn't changed. Once the import builds, let jade delete it.
+That only happens when nothing exists solely in the original:
+
+```bash
+jade import ~/code/frontend --check           # what only the original has (exits 1 if anything)
+jade import ~/code/frontend --remove-source   # same check, then delete
+```
+
+For the full checklist (non-git folders, empty repos, rebuilding, ignored files),
+see "Migrating an existing project" in the jade-workspace skill.
 
 Confirm what you've got:
 

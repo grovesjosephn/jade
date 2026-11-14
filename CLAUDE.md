@@ -16,6 +16,7 @@ The word "workspace" is overloaded in older code and docs. In this codebase:
 - `commands/`: one file per CLI command, and the path matches the invocation (`commands/workspace/add.ts` is `jade workspace add`). A command with subcommands is a folder whose `index.ts` registers them. Every command is also registered in `packages/cli/index.ts`.
 - `core/`: jade's own concepts: the directory layout (`layout.ts`), config, groups and their metadata, health checks, `.env` handling. No prompts and no `process.exit`.
 - `adapters/`: wrappers around external programs and the filesystem (git, gh, fs, herdr-tui, herdr-core, tmux). Commands receive these through injectable backends so tests can pass in fakes from `test/`.
+- Output: commands take `intro`, `outro`, `cancel`, `log` and `spinner` from `adapters/ui.ts`, never from `@clack/prompts` directly. It renders clack in a terminal and plain tagged lines otherwise (`JADE_PLAIN=1|0` forces either), and a command with `--json` calls `setJsonMode(asJson)` at the start of `run` so only its JSON reaches stdout. Interactive prompts still come from clack, behind `canPrompt()`, and need a flag-based way around them.
 - `bundled-skills/`: the skills `jade skills install` ships. The skill text itself lives in `packages/cli/skills/`.
 - Commands must not import from each other. Logic that two commands share goes in `core/` or `adapters/`.
 
