@@ -16,7 +16,7 @@ Clone each repo once. Work on many branches across many repos at the same time.
 [Quick start](#-quick-start) ·
 [Layout](#-how-it-works) ·
 [Commands](#-commands) ·
-[herdr & tmux](#-herdr--tmux) ·
+[herdr-tui & tmux](#-herdr-tui--tmux) ·
 [Agent skills](#-agent-skills) ·
 [Development](#-development)
 
@@ -43,7 +43,7 @@ while a review is open.
 - 🌿 **Branch-per-group.** A *worktree group* is a folder of apps that all share one branch name.
 - 🧭 **Contextual.** Commands work out which workspace and group you're in by walking up from your current directory.
 - 🩺 **Self-diagnosing.** `jade status` flags branch drift, detached HEADs, dirty trees, and missing `.env` files, and suggests the command that fixes each one.
-- 🖥️ **Terminal-native.** `jade open` turns a group into a [herdr](https://herdr.dev) workspace or a tmux session, with one tab per app.
+- 🖥️ **Terminal-native.** `jade open` turns a group into a [herdr-tui](https://herdr.dev) workspace or a tmux session, with one tab per app.
 - 🤖 **Agent-ready.** It ships skills that teach Claude Code and Cursor how a jade workspace is laid out.
 
 ## 📦 Install
@@ -179,7 +179,7 @@ target a root other than the one jade finds from your current directory.
 | `jade exec [-g group] [--apps a,b] [-p] -- <cmd...>` | Run a command in every app of a group (the current one by default), with `JADE_APP`/`JADE_GROUP`/`JADE_ROOT` set. Keeps going past failures and exits non-zero if any app failed. `-p` runs all apps at once. A single quoted argument runs through `sh -c`. |
 | `jade doctor [group] [--dry-run] [--add-missing] [--json]` | Fix what `jade status` flags: put drifted or detached apps back on their branch, and copy missing `.env` files. With `--add-missing`, it also creates missing worktrees. It never checks out over uncommitted changes or takes a branch another worktree has checked out. Outside a group, it checks every group. |
 | `jade env sync` | Copy `.env/<app>/.env` into every worktree of that app. |
-| `jade open [group] [--tmux]` | Open a group as a herdr workspace or tmux session. See [below](#-herdr--tmux). |
+| `jade open [group] [--tmux]` | Open a group as a herdr-tui workspace or tmux session. See [below](#-herdr-tui--tmux). |
 | `jade skills install` | Install the bundled agent skills. See [below](#-agent-skills). |
 
 > **Adding a new app to an existing feature group:** `jade add` only checks the
@@ -201,7 +201,7 @@ workspace: feat-navigation
 
 Pass a name (`jade status feat-auth`) to report on a group from anywhere, or
 `--root` to force the root summary. `--json` returns the full report: working-tree
-counts, `.env` gaps, missing worktrees, herdr open state, and an `attention[]` list
+counts, `.env` gaps, missing worktrees, herdr-tui open state, and an `attention[]` list
 that pairs each problem with the command that fixes it. `jade doctor` applies the
 safe fixes for you.
 
@@ -209,7 +209,7 @@ A group made by `jade review` records each app's expected branch in
 `workspace/<ticket>/.jade-group.json`. That way `status` and `doctor` don't count
 its PR branches as drift, or its left-out apps as missing.
 
-## 🖥️ herdr & tmux
+## 🖥️ herdr-tui & tmux
 
 `jade open` lays a group out in your terminal multiplexer like this:
 
@@ -223,29 +223,29 @@ jade open              # open the current group
 jade open feat-auth    # or name one (defaults to main when outside a group)
 ```
 
-### herdr
+### herdr-tui
 
-When jade runs inside a [herdr](https://herdr.dev) session (`HERDR_ENV=1`), the
-group becomes a **dedicated herdr workspace** labeled with the group name, and it
-gets focus. jade drives herdr through its CLI and uses `HERDR_BIN_PATH` when it's set.
+When jade runs inside a [herdr-tui](https://herdr.dev) session (`HERDR_ENV=1`), the
+group becomes a **dedicated herdr-tui workspace** labeled with the group name, and it
+gets focus. jade drives herdr-tui through its `herdr` CLI and uses `HERDR_BIN_PATH` when it's set.
 
 ### tmux
 
-Outside herdr, or when you pass `--tmux`, jade creates a **tmux session** named
+Outside herdr-tui, or when you pass `--tmux`, jade creates a **tmux session** named
 after the group. How it hands control to you depends on where you run it:
 
 | Where you run it | What happens |
 |---|---|
 | A plain terminal | The session is created (or found), then attached with `tmux attach-session`. |
 | Inside a tmux client (`$TMUX` set) | jade runs a non-blocking `switch-client` to the session. |
-| Inside a herdr pane, with `--tmux` | The session is created and left running in the background, so tmux isn't nested inside herdr. |
+| Inside a herdr-tui pane, with `--tmux` | The session is created and left running in the background, so tmux isn't nested inside herdr-tui. |
 
 jade uses `TMUX_BIN_PATH` when it's set, and otherwise `tmux` on your `PATH`.
 
-### herdr plugin
+### herdr-tui plugin
 
-[`packages/herdr`](packages/herdr) is a [herdr plugin](https://herdr.dev/docs/plugins/)
-that puts jade into herdr's UI:
+[`packages/herdr-tui`](packages/herdr-tui) is a [herdr-tui plugin](https://herdr.dev/docs/plugins/)
+that puts jade into herdr-tui's UI:
 
 | Entry point | Kind | What it does |
 |---|---|---|
@@ -255,8 +255,8 @@ that puts jade into herdr's UI:
 | **Jade: Switch workspace** | overlay pane | A fast switcher. Groups that are already open float to the top and get focused instantly. Picking a closed group runs `jade open`. |
 
 ```bash
-herdr plugin link /path/to/jade/packages/herdr   # local development
-herdr plugin install <org>/jade/packages/herdr   # once published
+herdr plugin link /path/to/jade/packages/herdr-tui   # local development
+herdr plugin install <org>/jade/packages/herdr-tui   # once published
 ```
 
 To bind the switcher to a key, add this to `~/.config/herdr/config.toml`, then run
@@ -272,6 +272,16 @@ description = "Jade: switch workspace"
 
 The `JADE_CWD` part passes along the focused pane's directory, so the switcher
 finds the right workspace root no matter what the plugin's own working directory is.
+
+### herdr-app mod
+
+[`packages/herdr-app`](packages/herdr-app) is a mod for [herdr-app](https://herdr.dev),
+the desktop app. It shows every group as a card with its apps' branches,
+changes and drift, plus the agents working in each one. From a card you can
+open the group as a space (a root tab plus a tab per app), run `jade doctor`
+on it, or create a new group. Install it with `packages/herdr-app/install.sh`,
+then open it with `herdr-app do mod.open '{"name":"jade"}'` or a key binding.
+See its [README](packages/herdr-app/README.md).
 
 Each plugin script is a thin wrapper around the `jade` binary on your `PATH`
 (override it with `JADE_BIN_PATH`), so none of jade's logic is duplicated in the
@@ -299,12 +309,13 @@ contains the skills and doesn't need a `skills/` folder next to it.
 
 ## 🧑‍💻 Development
 
-This repo is a Bun workspace with two packages:
+This repo is a Bun workspace with three packages:
 
 | Package | Description |
 |---|---|
 | [`packages/cli`](packages/cli) | The `jade` CLI (citty + @clack/prompts). |
-| [`packages/herdr`](packages/herdr) | The herdr plugin. |
+| [`packages/herdr-tui`](packages/herdr-tui) | The herdr-tui plugin. |
+| [`packages/herdr-app`](packages/herdr-app) | The herdr-app mod. |
 
 ```bash
 bun test                # run the test suite

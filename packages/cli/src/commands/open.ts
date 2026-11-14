@@ -10,7 +10,7 @@ import {
 import { getAppNames } from "../core/config.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
-import { defaultRunHerdr, findWorkspaceByLabel, type HerdrRunner } from "../adapters/herdr.ts";
+import { defaultRunHerdrTui, findWorkspaceByLabel, type HerdrTuiRunner } from "../adapters/herdr-tui.ts";
 import {
   defaultRunTmux,
   defaultAttachTmux,
@@ -19,9 +19,9 @@ import {
   type TmuxAttacher,
 } from "../adapters/tmux.ts";
 
-export type { HerdrRunner, TmuxRunner, TmuxAttacher };
+export type { HerdrTuiRunner, TmuxRunner, TmuxAttacher };
 
-/** Find an existing herdr workspace's id by its label, from `workspace list` JSON. */
+/** Find an existing herdr-tui workspace's id by its label, from `workspace list` JSON. */
 function findWorkspaceIdByLabel(listOutput: string, label: string): string | null {
   return findWorkspaceByLabel(listOutput, label)?.workspaceId ?? null;
 }
@@ -41,19 +41,19 @@ function parseCreatedWorkspace(createOutput: string): { workspaceId: string | nu
 }
 
 /**
- * tmux backend for `jade open`. Mirrors the herdr flow (focus an existing
+ * tmux backend for `jade open`. Mirrors the herdr-tui flow (focus an existing
  * session, else create one) but addresses everything by name — tmux has no
- * opaque ids to parse out of JSON like herdr does. Has no precondition of its
- * own (unlike herdr's `HERDR_ENV` requirement) — it works from anywhere,
+ * opaque ids to parse out of JSON like herdr-tui does. Has no precondition of its
+ * own (unlike herdr-tui's `HERDR_ENV` requirement) — it works from anywhere,
  * handing off to the session differently depending on where "anywhere" is:
  *
  * - Already attached to a tmux client (`$TMUX` set): a quick, non-blocking
  *   `switch-client` — you're already looking at a tmux client, just point it
  *   at the new session.
- * - Inside a herdr pane (`--tmux` forced the tmux backend despite
+ * - Inside a herdr-tui pane (`--tmux` forced the tmux backend despite
  *   `HERDR_ENV=1`): create/find the session and stop there. There's no plain
  *   terminal to hand off to, and attaching would nest a tmux client inside
- *   the herdr pane, so it's left running in the background instead.
+ *   the herdr-tui pane, so it's left running in the background instead.
  * - Otherwise (a plain terminal, no multiplexer at all): hand the terminal
  *   over to an interactive `attach-session` via `attachTmux`.
  *
@@ -71,7 +71,7 @@ async function openWithTmux(
   apps: string[]
 ): Promise<number | undefined> {
   const attachedToTmux = Boolean(process.env.TMUX);
-  const inHerdr = process.env.HERDR_ENV === "1";
+  const inHerdrTui = process.env.HERDR_ENV === "1";
 
   const existed = await tmuxSessionExists(runTmux, group);
 
@@ -109,7 +109,7 @@ async function openWithTmux(
     return undefined;
   }
 
-  if (inHerdr) {
+  if (inHerdrTui) {
     outro(
       existed
         ? `tmux session '${group}' is already running in the background. Attach from a terminal with 'tmux attach -t ${group}'.`
@@ -127,7 +127,7 @@ async function openWithTmux(
 }
 
 export function makeOpenCommand(
-  runHerdr: HerdrRunner = defaultRunHerdr,
+  runHerdrTui: HerdrTuiRunner = defaultRunHerdrTui,
   fs: FileSystemBackend = realFileSystemBackend,
   config: ConfigBackend = realConfigBackend,
   runTmux: TmuxRunner = defaultRunTmux,
@@ -137,7 +137,7 @@ export function makeOpenCommand(
     meta: {
       name: "open",
       description:
-        "Open a worktree group as a dedicated herdr workspace or tmux session (labeled with the group name), with a root tab/window plus one per app",
+        "Open a worktree group as a dedicated herdr-tui workspace or tmux session (labeled with the group name), with a root tab/window plus one per app",
     },
     args: {
       group: {
@@ -152,7 +152,7 @@ export function makeOpenCommand(
       },
       tmux: {
         type: "boolean",
-        description: "Force the tmux backend, even inside a herdr pane (HERDR_ENV=1)",
+        description: "Force the tmux backend, even inside a herdr-tui pane (HERDR_ENV=1)",
         default: false,
       },
     },
@@ -166,10 +166,10 @@ export function makeOpenCommand(
         process.exit(1);
       }
 
-      // herdr wins when both are active, unless --tmux forces the tmux
+      // herdr-tui wins when both are active, unless --tmux forces the tmux
       // backend; otherwise tmux is the universal fallback — it needs no
       // pre-existing session (see openWithTmux).
-      const useHerdr = process.env.HERDR_ENV === "1" && !args.tmux;
+      const useHerdrTui = process.env.HERDR_ENV === "1" && !args.tmux;
 
       const group =
         (args.group as string | undefined) ||
@@ -197,9 +197,9 @@ export function makeOpenCommand(
         ...[...present].filter((app) => !configOrder.includes(app)).sort(),
       ];
 
-      intro(`Opening '${group}' in ${useHerdr ? "herdr" : "tmux"}`);
+      intro(`Opening '${group}' in ${useHerdrTui ? "herdr-tui" : "tmux"}`);
 
-      if (!useHerdr) {
+      if (!useHerdrTui) {
         let tmuxExitCode: number | undefined;
         try {
           tmuxExitCode = await openWithTmux(runTmux, attachTmux, group, groupPath, apps);
@@ -214,36 +214,36 @@ export function makeOpenCommand(
       }
 
       try {
-        // If a herdr workspace for this group already exists, just focus it —
+        // If a herdr-tui workspace for this group already exists, just focus it —
         // re-running jade open shouldn't pile up duplicate workspaces/tabs.
-        const existingId = findWorkspaceIdByLabel(await runHerdr(["workspace", "list"]), group);
+        const existingId = findWorkspaceIdByLabel(await runHerdrTui(["workspace", "list"]), group);
         if (existingId) {
-          await runHerdr(["workspace", "focus", existingId]);
+          await runHerdrTui(["workspace", "focus", existingId]);
           outro(`Focused existing '${group}' workspace. Run claude in its root tab for cross-app context.`);
           return;
         }
 
-        // Create a dedicated, focused herdr workspace for this group so the
+        // Create a dedicated, focused herdr-tui workspace for this group so the
         // sidebar shows which group you're in. `workspace create` also spawns
         // an initial tab at groupPath — that's our root tab; rename it to the
         // group so it reads clearly.
         const { workspaceId, rootTabId } = parseCreatedWorkspace(
-          await runHerdr(["workspace", "create", "--cwd", groupPath, "--label", group, "--focus"])
+          await runHerdrTui(["workspace", "create", "--cwd", groupPath, "--label", group, "--focus"])
         );
 
         if (!workspaceId) {
-          cancel(`herdr did not return a workspace id for '${group}'.`);
+          cancel(`herdr-tui did not return a workspace id for '${group}'.`);
           process.exit(1);
         }
 
         if (rootTabId) {
-          await runHerdr(["tab", "rename", rootTabId, group]);
+          await runHerdrTui(["tab", "rename", rootTabId, group]);
         }
 
         // One tab per app inside the new workspace, without stealing focus so
         // the root tab stays active.
         for (const app of apps) {
-          await runHerdr([
+          await runHerdrTui([
             "tab",
             "create",
             "--workspace",
@@ -256,7 +256,7 @@ export function makeOpenCommand(
           ]);
         }
       } catch (error) {
-        cancel(`Failed to drive herdr: ${error}`);
+        cancel(`Failed to drive herdr-tui: ${error}`);
         process.exit(1);
       }
 

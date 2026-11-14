@@ -12,7 +12,7 @@
     },
     "packages/cli": {
       "name": "jade",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "bin": {
         "jade": "./index.ts",
       },
@@ -28,8 +28,12 @@
         "typescript": "^7.0.2",
       },
     },
-    "packages/herdr": {
-      "name": "jade-herdr-plugin",
+    "packages/herdr-app": {
+      "name": "jade-herdr-app-mod",
+      "version": "0.1.0",
+    },
+    "packages/herdr-tui": {
+      "name": "jade-herdr-tui-plugin",
       "version": "0.1.0",
       "dependencies": {
         "@clack/prompts": "^1.7.0",
@@ -197,7 +201,9 @@
 
     "jade": ["jade@workspace:packages/cli"],
 
-    "jade-herdr-plugin": ["jade-herdr-plugin@workspace:packages/herdr"],
+    "jade-herdr-app-mod": ["jade-herdr-app-mod@workspace:packages/herdr-app"],
+
+    "jade-herdr-tui-plugin": ["jade-herdr-tui-plugin@workspace:packages/herdr-tui"],
 
     "jiti": ["jiti@2.7.0", "", { "bin": { "jiti": "lib/jiti-cli.mjs" } }, "sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ=="],
 

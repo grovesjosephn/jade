@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { select, isCancel, intro, outro, cancel, log, text } from "@clack/prompts";
 import { resolveContextCwd, jadeBin } from "../lib/context.ts";
-import { listOpenWorkspaces, focusWorkspace, type OpenWorkspace } from "../lib/herdr.ts";
+import { listOpenWorkspaces, focusWorkspace, type OpenWorkspace } from "../lib/herdr-tui.ts";
 
 function jadeCaptured(args: string[], cwd: string): { stdout: string; status: number } {
   const result = spawnSync(jadeBin(), args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
@@ -64,7 +64,7 @@ async function main() {
     process.exit(1);
   }
 
-  // Which groups are already open in this herdr session (matched by workspace label).
+  // Which groups are already open in this herdr-tui session (matched by workspace label).
   const open = listOpenWorkspaces();
 
   const options = groups
@@ -82,7 +82,7 @@ async function main() {
   const group = choice as string;
   const ws = open.get(group);
 
-  // Already open: focus it directly through herdr — instant, no jade spin-up.
+  // Already open: focus it directly through herdr-tui — instant, no jade spin-up.
   // Fall back to a full `jade open` if focusing fails (e.g. a stale id).
   if (ws) {
     if (ws.focused) {

@@ -3,7 +3,7 @@ name: jade-setup
 description: >-
   Step-by-step guide for setting up a brand-new jade workspace from scratch:
   installing the jade CLI, running jade init, adding repos, creating a
-  feature workspace group, and (optionally) wiring up herdr. Use when someone
+  feature workspace group, and (optionally) wiring up herdr-tui. Use when someone
   is starting fresh — no workspace exists yet — as opposed to jade-workspace,
   which documents the layout and commands for a workspace that already
   exists.
@@ -108,11 +108,11 @@ cd ~/work/my-workspace
 jade workspace remove feat-navigation -d   # -d also deletes the branches
 ```
 
-## 6. Optional: herdr integration
+## 6. Optional: herdr-tui integration
 
-If you use the [herdr](https://herdr.dev) terminal multiplexer, `jade open`
-turns a workspace group into its own herdr workspace with one tab per app
-plus a root tab. See the README's "Herdr integration" section for the plugin
+If you use the [herdr-tui](https://herdr.dev) terminal multiplexer, `jade open`
+turns a workspace group into its own herdr-tui workspace with one tab per app
+plus a root tab. See the README's "herdr-tui & tmux" section for the plugin
 install steps and keybinding setup — not needed to use jade on its own.
 
 ## 7. Optional: install the agent skill into other projects

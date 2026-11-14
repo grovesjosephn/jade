@@ -7,7 +7,7 @@ import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
 import { buildAttention, collectApps, type AppReport, type Attention } from "../core/health.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
-import { defaultRunHerdr, findWorkspaceByLabel, type HerdrRunner } from "../adapters/herdr.ts";
+import { defaultRunHerdrTui, findWorkspaceByLabel, type HerdrTuiRunner } from "../adapters/herdr-tui.ts";
 import pkg from "../../package.json" with { type: "json" };
 
 export type StatusTarget = { view: "root" } | { view: "workspace"; name: string };
@@ -34,7 +34,7 @@ export function resolveStatusTarget(opts: {
   return { view: "root" };
 }
 
-interface HerdrReport {
+interface HerdrTuiReport {
   open: boolean;
   focused: boolean;
   workspaceId: string | null;
@@ -78,7 +78,7 @@ function printStatusJson(workspaceRoot: string, orgUrl: string | undefined, grou
 /**
  * The workspace name plus the apps actually checked out here, one per line with
  * their branch. Deliberately terse — everything else (working-tree state, env
- * gaps, missing apps, herdr, the actionable `attention` list) stays available
+ * gaps, missing apps, herdr-tui, the actionable `attention` list) stays available
  * via --json rather than crowding the interactive view.
  */
 function printWorkspaceStatus(group: ResolvedGroup, apps: AppReport[]): void {
@@ -115,7 +115,7 @@ function printWorkspaceStatusJson(
   orgUrl: string | undefined,
   group: ResolvedGroup,
   apps: AppReport[],
-  herdr: HerdrReport | null,
+  herdr: HerdrTuiReport | null,
   attention: Attention[]
 ): void {
   console.log(
@@ -135,17 +135,17 @@ function printWorkspaceStatusJson(
 }
 
 /**
- * Query herdr for whether this group is open in the current session. Best
- * effort by design: status must never fail because herdr is unreachable.
+ * Query herdr-tui for whether this group is open in the current session. Best
+ * effort by design: status must never fail because herdr-tui is unreachable.
  */
-async function collectHerdr(
+async function collectHerdrTui(
   groupName: string,
-  runHerdr: HerdrRunner
-): Promise<HerdrReport | null> {
+  runHerdrTui: HerdrTuiRunner
+): Promise<HerdrTuiReport | null> {
   if (process.env.HERDR_ENV !== "1") return null;
 
   try {
-    const found = findWorkspaceByLabel(await runHerdr(["workspace", "list"]), groupName);
+    const found = findWorkspaceByLabel(await runHerdrTui(["workspace", "list"]), groupName);
     if (!found) return { open: false, focused: false, workspaceId: null };
     return { open: true, focused: found.focused, workspaceId: found.workspaceId };
   } catch {
@@ -155,7 +155,7 @@ async function collectHerdr(
 
 export function makeStatusCommand(
   git: GitBackend = realGitBackend,
-  runHerdr: HerdrRunner = defaultRunHerdr,
+  runHerdrTui: HerdrTuiRunner = defaultRunHerdrTui,
   fs: FileSystemBackend = realFileSystemBackend,
   config: ConfigBackend = realConfigBackend
 ) {
@@ -232,8 +232,8 @@ export function makeStatusCommand(
         }
 
         // Only the JSON view carries the full picture, so only it pays for the
-        // extra gathering — including the herdr subprocess.
-        const herdr = await collectHerdr(group.name, runHerdr);
+        // extra gathering — including the herdr-tui subprocess.
+        const herdr = await collectHerdrTui(group.name, runHerdrTui);
         printWorkspaceStatusJson(
           workspaceRoot,
           jadeConfig.orgUrl,

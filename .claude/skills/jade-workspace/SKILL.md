@@ -74,7 +74,7 @@ workspace: feat-auth
 
 Markers cover only what can contradict the branch: `[drift]` (branch ≠ group name) and `[detached]` (detached HEAD). Apps with **no worktree in this group are omitted** from the text view.
 
-**`--json` is the full report — use it for anything beyond eyeballing branches.** It adds, per app, `tree` (staged/unstaged/untracked + `clean`), `env` (`present`/`sourceAvailable`), and `present: false` rows for apps missing from the group; plus `herdr` open/focused state and an `attention[]` array pairing each problem with the command that fixes it. `attention[].kind` is one of `branch-drift`, `detached-head`, `missing-worktree`, `missing-env`, `git-error`, `unpublished` (no remote yet; `jade doctor` leaves this one alone). Each app's `expectedBranch` is what drift is measured against: the default branch in `main`, the branch recorded in `.jade-group.json` for a review group, else the group name.
+**`--json` is the full report — use it for anything beyond eyeballing branches.** It adds, per app, `tree` (staged/unstaged/untracked + `clean`), `env` (`present`/`sourceAvailable`), and `present: false` rows for apps missing from the group; plus `herdr` (herdr-tui) open/focused state and an `attention[]` array pairing each problem with the command that fixes it. `attention[].kind` is one of `branch-drift`, `detached-head`, `missing-worktree`, `missing-env`, `git-error`, `unpublished` (no remote yet; `jade doctor` leaves this one alone). Each app's `expectedBranch` is what drift is measured against: the default branch in `main`, the branch recorded in `.jade-group.json` for a review group, else the group name.
 
 ```
 --json (root)      → {view:"root", version, root, orgUrl, groups:[...]}
@@ -83,7 +83,7 @@ Markers cover only what can contradict the branch: `[drift]` (branch ≠ group n
 
 **When scripting or parsing, always pass `--root` or an explicit `<group>`** — never rely on cwd. Branch on the `view` field, don't assume a shape.
 
-Cost: root view is a pure directory scan; the text workspace view is one git call per app; `--json` is two plus a herdr query. Ahead/behind vs upstream is **not** reported — it would need a fetch to be truthful.
+Cost: root view is a pure directory scan; the text workspace view is one git call per app; `--json` is two plus a herdr-tui query. Ahead/behind vs upstream is **not** reported — it would need a fetch to be truthful.
 
 ## Agent workflow
 

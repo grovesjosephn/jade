@@ -1,6 +1,6 @@
 # jade
 
-A Bun/TypeScript CLI for multi-repo workspaces built on git bare repos and worktrees. The CLI is `packages/cli`; `packages/herdr` is the herdr terminal plugin.
+A Bun/TypeScript CLI for multi-repo workspaces built on git bare repos and worktrees. The CLI is `packages/cli`; `packages/herdr-tui` is the herdr-tui terminal plugin, and `packages/herdr-app/mods/jade` is a herdr-app mod (install with `packages/herdr-app/install.sh`, check with `herdr-app check`) (herdr-tui is the `herdr` multiplexer; herdr-core, driven by the `hc` CLI, is the separate terminal runtime; call it herdr-core in code and docs, `hc` only for the command itself).
 
 ## Glossary
 
@@ -15,7 +15,7 @@ The word "workspace" is overloaded in older code and docs. In this codebase:
 
 - `commands/`: one file per CLI command, and the path matches the invocation (`commands/workspace/add.ts` is `jade workspace add`). A command with subcommands is a folder whose `index.ts` registers them. Every command is also registered in `packages/cli/index.ts`.
 - `core/`: jade's own concepts: the directory layout (`layout.ts`), config, groups and their metadata, health checks, `.env` handling. No prompts and no `process.exit`.
-- `adapters/`: wrappers around external programs and the filesystem (git, fs, herdr, tmux). Commands receive these through injectable backends so tests can pass in fakes from `test/`.
+- `adapters/`: wrappers around external programs and the filesystem (git, gh, fs, herdr-tui, herdr-core, tmux). Commands receive these through injectable backends so tests can pass in fakes from `test/`.
 - `bundled-skills/`: the skills `jade skills install` ships. The skill text itself lives in `packages/cli/skills/`.
 - Commands must not import from each other. Logic that two commands share goes in `core/` or `adapters/`.
 

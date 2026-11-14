@@ -1,5 +1,5 @@
 {
-  "name": "jade-herdr-plugin",
+  "name": "jade-herdr-tui-plugin",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -33,7 +33,7 @@ It exits non-zero when nothing could be created or only ambiguous matches were f
 
 The group records each app's expected branch in `workspace/<ticket-id>/.jade-group.json`. `jade status` and `jade doctor` use it, so the PR branches don't show as `[drift]` and left-out apps aren't reported missing. Don't edit or delete that file by hand.
 
-Useful alongside: `jade exec -- git log --oneline origin/main..HEAD` (or any command) runs in every app of the group; `jade open JADE-01` opens it in herdr/tmux.
+Useful alongside: `jade exec -- git log --oneline origin/main..HEAD` (or any command) runs in every app of the group; `jade open JADE-01` opens it in herdr-tui/tmux.
 
 If an app's branch was already checked out in another workspace, git can't check it out twice, so the review uses a suffixed branch on the same commit (`<branch>-<hash>`) and says so.
 

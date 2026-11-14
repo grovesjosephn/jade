@@ -1,0 +1,3 @@
+# Written by the Herdr app into mod folders (editor types); not ours.
+mods/*/gpui-kit.d.ts
+mods/*/jsconfig.json

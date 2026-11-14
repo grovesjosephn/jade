@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseOpenWorkspaces } from "../herdr.ts";
+import { parseOpenWorkspaces } from "../herdr-tui.ts";
 
 describe("parseOpenWorkspaces", () => {
   test("keys workspaces by label with id and focus", () => {
