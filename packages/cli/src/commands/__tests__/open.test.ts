@@ -1,6 +1,6 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { join } from "path";
-import { makeOpenCommand, type HerdrRunner, type TmuxRunner, type TmuxAttacher } from "../open.ts";
+import { makeOpenCommand, type HerdrTuiRunner, type TmuxRunner, type TmuxAttacher } from "../open.ts";
 import { makeAddCommand } from "../add.ts";
 import { createTempDir, withCapturedConsole, expectsExit } from "../../test/helpers.ts";
 import { createMockGitBackend } from "../../test/mock-git-backend.ts";
@@ -9,13 +9,13 @@ import { createMockConfigBackend, type MockConfigBackend } from "../../test/mock
 import { makeInitCommand } from "../init.ts";
 
 /**
- * Fake herdr runner. Records every invocation and returns canned JSON for the
+ * Fake herdr-tui runner. Records every invocation and returns canned JSON for the
  * read commands open.ts parses. `existingLabels` seeds `workspace list` so the
  * focus-existing path can be exercised.
  */
-function captureHerdr(existingLabels: string[] = []): { runHerdr: HerdrRunner; calls: string[][] } {
+function captureHerdrTui(existingLabels: string[] = []): { runHerdrTui: HerdrTuiRunner; calls: string[][] } {
   const calls: string[][] = [];
-  const runHerdr: HerdrRunner = async (args) => {
+  const runHerdrTui: HerdrTuiRunner = async (args) => {
     calls.push(args);
     if (args[0] === "workspace" && args[1] === "list") {
       return JSON.stringify({
@@ -31,12 +31,12 @@ function captureHerdr(existingLabels: string[] = []): { runHerdr: HerdrRunner; c
     }
     return "";
   };
-  return { runHerdr, calls };
+  return { runHerdrTui, calls };
 }
 
 /** Herdr runner that fails the test if invoked — used by tmux-path tests. */
-const unusedHerdr: HerdrRunner = async () => {
-  throw new Error("herdr should not be called on the tmux path");
+const unusedHerdrTui: HerdrTuiRunner = async () => {
+  throw new Error("herdr-tui should not be called on the tmux path");
 };
 
 /**
@@ -56,9 +56,9 @@ function captureTmux(sessionExists = false): { runTmux: TmuxRunner; calls: strin
   return { runTmux, calls };
 }
 
-/** tmux runner that fails the test if invoked — used by herdr-path tests. */
+/** tmux runner that fails the test if invoked — used by herdr-tui-path tests. */
 const unusedTmux: TmuxRunner = async () => {
-  throw new Error("tmux should not be called on the herdr path");
+  throw new Error("tmux should not be called on the herdr-tui path");
 };
 
 /**
@@ -121,8 +121,8 @@ describe("open command", () => {
     process.env.HERDR_ENV = "1";
     delete process.env.TMUX;
 
-    const { runHerdr, calls } = captureHerdr();
-    const openCmd = makeOpenCommand(runHerdr, fs, config, unusedTmux, unusedAttach);
+    const { runHerdrTui, calls } = captureHerdrTui();
+    const openCmd = makeOpenCommand(runHerdrTui, fs, config, unusedTmux, unusedAttach);
 
     await withCapturedConsole(() =>
       openCmd.run!({ args: { workspace: workspacePath } } as any)
@@ -151,9 +151,9 @@ describe("open command", () => {
     process.env.HERDR_ENV = "1";
     delete process.env.TMUX;
 
-    // A herdr workspace labeled "main" already exists (id w0 from captureHerdr).
-    const { runHerdr, calls } = captureHerdr(["main"]);
-    const openCmd = makeOpenCommand(runHerdr, fs, config, unusedTmux, unusedAttach);
+    // A herdr-tui workspace labeled "main" already exists (id w0 from captureHerdrTui).
+    const { runHerdrTui, calls } = captureHerdrTui(["main"]);
+    const openCmd = makeOpenCommand(runHerdrTui, fs, config, unusedTmux, unusedAttach);
 
     await withCapturedConsole(() =>
       openCmd.run!({ args: { workspace: workspacePath } } as any)
@@ -166,7 +166,7 @@ describe("open command", () => {
     expect(calls.some((c) => c[0] === "workspace" && c[1] === "create")).toBe(false);
   });
 
-  // Note: "exits without touching herdr when HERDR_ENV is not set" (main) no
+  // Note: "exits without touching herdr-tui when HERDR_ENV is not set" (main) no
   // longer applies — tmux is now the fallback instead of an error; see the
   // "falls back to an interactive tmux attach..." test below.
 
@@ -175,8 +175,8 @@ describe("open command", () => {
     process.env.HERDR_ENV = "1";
     delete process.env.TMUX;
 
-    const { runHerdr, calls } = captureHerdr();
-    const openCmd = makeOpenCommand(runHerdr, fs, config, unusedTmux, unusedAttach);
+    const { runHerdrTui, calls } = captureHerdrTui();
+    const openCmd = makeOpenCommand(runHerdrTui, fs, config, unusedTmux, unusedAttach);
 
     await expectsExit(() =>
       openCmd.run!({ args: { group: "does-not-exist", workspace: workspacePath } } as any)
@@ -190,7 +190,7 @@ describe("open command", () => {
     process.env.TMUX = "/tmp/tmux-1000/default,12345,0";
 
     const { runTmux, calls } = captureTmux(false);
-    const openCmd = makeOpenCommand(unusedHerdr, fs, config, runTmux, unusedAttach);
+    const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, unusedAttach);
 
     await withCapturedConsole(() =>
       openCmd.run!({ args: { workspace: workspacePath } } as any)
@@ -213,7 +213,7 @@ describe("open command", () => {
     process.env.TMUX = "/tmp/tmux-1000/default,12345,0";
 
     const { runTmux, calls } = captureTmux(true);
-    const openCmd = makeOpenCommand(unusedHerdr, fs, config, runTmux, unusedAttach);
+    const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, unusedAttach);
 
     await withCapturedConsole(() =>
       openCmd.run!({ args: { workspace: workspacePath } } as any)
@@ -225,14 +225,14 @@ describe("open command", () => {
     expect(calls.some((c) => c[0] === "new-session")).toBe(false);
   });
 
-  test("falls back to an interactive tmux attach from a plain terminal (no herdr, no tmux client)", async () => {
+  test("falls back to an interactive tmux attach from a plain terminal (no herdr-tui, no tmux client)", async () => {
     const { workspacePath, fs, config } = await setupWorkspaceWithApps();
     delete process.env.HERDR_ENV;
     delete process.env.TMUX;
 
     const { runTmux, calls } = captureTmux(false);
     const { attachTmux, calls: attachCalls } = captureAttach(0);
-    const openCmd = makeOpenCommand(unusedHerdr, fs, config, runTmux, attachTmux);
+    const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, attachTmux);
 
     await expectsExit(() => openCmd.run!({ args: { workspace: workspacePath } } as any), 0);
 
@@ -255,7 +255,7 @@ describe("open command", () => {
 
     const { runTmux, calls } = captureTmux(true);
     const { attachTmux, calls: attachCalls } = captureAttach(0);
-    const openCmd = makeOpenCommand(unusedHerdr, fs, config, runTmux, attachTmux);
+    const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, attachTmux);
 
     await expectsExit(() => openCmd.run!({ args: { workspace: workspacePath } } as any), 0);
 
@@ -263,13 +263,13 @@ describe("open command", () => {
     expect(attachCalls).toEqual(["main"]);
   });
 
-  test("--tmux forces the tmux backend from inside herdr, creating the session without attaching", async () => {
+  test("--tmux forces the tmux backend from inside herdr-tui, creating the session without attaching", async () => {
     const { workspacePath, fs, config } = await setupWorkspaceWithApps();
     process.env.HERDR_ENV = "1";
     delete process.env.TMUX;
 
     const { runTmux, calls } = captureTmux(false);
-    const openCmd = makeOpenCommand(unusedHerdr, fs, config, runTmux, unusedAttach);
+    const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, unusedAttach);
 
     await withCapturedConsole(() =>
       openCmd.run!({ args: { workspace: workspacePath, tmux: true } } as any)
@@ -281,18 +281,18 @@ describe("open command", () => {
     expect(calls[2]).toEqual(["new-window", "-t", "main:", "-n", "app1", "-c", join(mainPath, "app1")]);
     expect(calls[3]).toEqual(["new-window", "-t", "main:", "-n", "app2", "-c", join(mainPath, "app2")]);
     expect(calls[4]).toEqual(["select-window", "-t", "main:main"]);
-    // No switch-client (no client attached) and no attach (never leave herdr's own pane).
+    // No switch-client (no client attached) and no attach (never leave herdr-tui's own pane).
     expect(calls.some((c) => c[0] === "switch-client")).toBe(false);
     expect(calls).toHaveLength(5);
   });
 
-  test("--tmux from inside herdr with an existing session just leaves it running", async () => {
+  test("--tmux from inside herdr-tui with an existing session just leaves it running", async () => {
     const { workspacePath, fs, config } = await setupWorkspaceWithApps();
     process.env.HERDR_ENV = "1";
     delete process.env.TMUX;
 
     const { runTmux, calls } = captureTmux(true);
-    const openCmd = makeOpenCommand(unusedHerdr, fs, config, runTmux, unusedAttach);
+    const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, unusedAttach);
 
     await withCapturedConsole(() =>
       openCmd.run!({ args: { workspace: workspacePath, tmux: true } } as any)
@@ -301,13 +301,13 @@ describe("open command", () => {
     expect(calls).toEqual([["has-session", "-t", "main"]]);
   });
 
-  test("--tmux with an attached tmux client still switches, even inside herdr", async () => {
+  test("--tmux with an attached tmux client still switches, even inside herdr-tui", async () => {
     const { workspacePath, fs, config } = await setupWorkspaceWithApps();
     process.env.HERDR_ENV = "1";
     process.env.TMUX = "/tmp/tmux-1000/default,12345,0";
 
     const { runTmux, calls } = captureTmux(true);
-    const openCmd = makeOpenCommand(unusedHerdr, fs, config, runTmux, unusedAttach);
+    const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, unusedAttach);
 
     await withCapturedConsole(() =>
       openCmd.run!({ args: { workspace: workspacePath, tmux: true } } as any)

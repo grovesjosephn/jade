@@ -1,9 +1,9 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { intro, outro, cancel, spinner } from "@clack/prompts";
-import { findWorkspaceRoot } from "../utils/workspace.ts";
-import { type GitBackend, realGitBackend } from "../utils/git-backend.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
+import { intro, outro, cancel, spinner } from "../adapters/ui.ts";
+import { findWorkspaceRoot } from "../core/layout.ts";
+import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 
 export function makeCheckoutCommand(
   git: GitBackend = realGitBackend,

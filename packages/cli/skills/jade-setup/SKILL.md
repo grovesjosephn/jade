@@ -3,7 +3,7 @@ name: jade-setup
 description: >-
   Step-by-step guide for setting up a brand-new jade workspace from scratch:
   installing the jade CLI, running jade init, adding repos, creating a
-  feature workspace group, and (optionally) wiring up herdr. Use when someone
+  feature workspace group, and (optionally) wiring up herdr-tui. Use when someone
   is starting fresh — no workspace exists yet — as opposed to jade-workspace,
   which documents the layout and commands for a workspace that already
   exists.
@@ -81,6 +81,25 @@ Each `add` bare-clones the repo into `.bare/<app>/` and checks out a
 worktree on the default branch into `main/<app>/`. It also back-fills the app
 into every **existing** workspace group (there's only `main` at this point).
 
+Already have a checkout with work in progress? Import it instead of cloning
+again:
+
+```bash
+jade import ~/code/frontend            # branch + uncommitted work → workspace/<branch>/frontend
+jade import ~/code/backend -g wip      # needed when the work is on the default branch
+```
+
+The original directory isn't changed. Once the import builds, let jade delete it.
+That only happens when nothing exists solely in the original:
+
+```bash
+jade import ~/code/frontend --check           # what only the original has (exits 1 if anything)
+jade import ~/code/frontend --remove-source   # same check, then delete
+```
+
+For the full checklist (non-git folders, empty repos, rebuilding, ignored files),
+see "Migrating an existing project" in the jade-workspace skill.
+
 Confirm what you've got:
 
 ```bash
@@ -108,11 +127,11 @@ cd ~/work/my-workspace
 jade workspace remove feat-navigation -d   # -d also deletes the branches
 ```
 
-## 6. Optional: herdr integration
+## 6. Optional: herdr-tui integration
 
-If you use the [herdr](https://herdr.dev) terminal multiplexer, `jade open`
-turns a workspace group into its own herdr workspace with one tab per app
-plus a root tab. See the README's "Herdr integration" section for the plugin
+If you use the [herdr-tui](https://herdr.dev) terminal multiplexer, `jade open`
+turns a workspace group into its own herdr-tui workspace with one tab per app
+plus a root tab. See the README's "herdr-tui & tmux" section for the plugin
 install steps and keybinding setup — not needed to use jade on its own.
 
 ## 7. Optional: install the agent skill into other projects

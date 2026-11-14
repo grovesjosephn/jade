@@ -1,7 +1,7 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { join } from "path";
-import { makeEnvSyncCommand } from "../env.ts";
-import { makeWorkspaceAddCommand, type SelectAppsFn } from "../workspace.ts";
+import { makeEnvSyncCommand } from "../env/sync.ts";
+import { makeWorkspaceAddCommand, type SelectAppsFn } from "../workspace/add.ts";
 import { makeAddCommand } from "../add.ts";
 import { makeInitCommand } from "../init.ts";
 import {

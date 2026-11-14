@@ -1,12 +1,13 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { findWorkspaceRoot, getCurrentGroup, listWorktreeDirs } from "../utils/workspace.ts";
-import { resolveGroup, type ResolvedGroup } from "../utils/group.ts";
-import { getAppEnvSourcePath } from "../utils/env.ts";
-import { type GitBackend, realGitBackend, type WorktreeStatus } from "../utils/git-backend.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
-import { type ConfigBackend, realConfigBackend } from "../utils/config-backend.ts";
-import { defaultRunHerdr, findWorkspaceByLabel, type HerdrRunner } from "../utils/herdr.ts";
+import { findWorkspaceRoot, getCurrentGroup, listWorktreeDirs } from "../core/layout.ts";
+import { resolveGroup, type ResolvedGroup } from "../core/group.ts";
+import { readGroupMeta } from "../core/group-meta.ts";
+import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
+import { buildAttention, collectApps, type AppReport, type Attention } from "../core/health.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
+import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
+import { defaultRunHerdrTui, findWorkspaceByLabel, type HerdrTuiRunner } from "../adapters/herdr-tui.ts";
 import pkg from "../../package.json" with { type: "json" };
 
 export type StatusTarget = { view: "root" } | { view: "workspace"; name: string };
@@ -33,33 +34,7 @@ export function resolveStatusTarget(opts: {
   return { view: "root" };
 }
 
-type AttentionKind =
-  | "branch-drift"
-  | "detached-head"
-  | "missing-worktree"
-  | "missing-env"
-  | "git-error";
-
-interface Attention {
-  app: string;
-  kind: AttentionKind;
-  message: string;
-  fix?: string;
-}
-
-interface AppReport {
-  name: string;
-  present: boolean;
-  path: string;
-  branch: string | null;
-  drift: boolean;
-  detached: boolean;
-  tree: (WorktreeStatus & { clean: boolean }) | null;
-  env: { present: boolean; sourceAvailable: boolean } | null;
-  error: string | null;
-}
-
-interface HerdrReport {
+interface HerdrTuiReport {
   open: boolean;
   focused: boolean;
   workspaceId: string | null;
@@ -103,7 +78,7 @@ function printStatusJson(workspaceRoot: string, orgUrl: string | undefined, grou
 /**
  * The workspace name plus the apps actually checked out here, one per line with
  * their branch. Deliberately terse — everything else (working-tree state, env
- * gaps, missing apps, herdr, the actionable `attention` list) stays available
+ * gaps, missing apps, herdr-tui, the actionable `attention` list) stays available
  * via --json rather than crowding the interactive view.
  */
 function printWorkspaceStatus(group: ResolvedGroup, apps: AppReport[]): void {
@@ -140,7 +115,7 @@ function printWorkspaceStatusJson(
   orgUrl: string | undefined,
   group: ResolvedGroup,
   apps: AppReport[],
-  herdr: HerdrReport | null,
+  herdr: HerdrTuiReport | null,
   attention: Attention[]
 ): void {
   console.log(
@@ -160,150 +135,17 @@ function printWorkspaceStatusJson(
 }
 
 /**
- * Gather per-app state for one workspace. Runs the apps concurrently: this is
- * the only view that makes git calls, so per-app latency is what the user feels.
- *
- * `detailed` gates the work the terse text view never renders — a status call
- * and two stats per app — so the interactive path costs one git call per app.
+ * Query herdr-tui for whether this group is open in the current session. Best
+ * effort by design: status must never fail because herdr-tui is unreachable.
  */
-async function collectApps(
-  workspaceRoot: string,
-  group: ResolvedGroup,
-  git: GitBackend,
-  fs: FileSystemBackend,
-  detailed: boolean
-): Promise<AppReport[]> {
-  return await Promise.all(
-    group.apps.map(async (app): Promise<AppReport> => {
-      if (!app.present) {
-        return {
-          name: app.name,
-          present: false,
-          path: app.path,
-          branch: null,
-          drift: false,
-          detached: false,
-          tree: null,
-          env: null,
-          error: null,
-        };
-      }
-
-      const env = detailed
-        ? {
-            present: await fs.pathExists(resolve(app.path, ".env")),
-            sourceAvailable: await fs.pathExists(getAppEnvSourcePath(workspaceRoot, app.name)),
-          }
-        : null;
-
-      try {
-        const [branch, tree] = await Promise.all([
-          git.currentBranch(app.path),
-          detailed ? git.status(app.path) : null,
-        ]);
-
-        // `rev-parse --abbrev-ref HEAD` reports the literal "HEAD" when detached;
-        // that isn't branch drift, it's a different problem worth naming.
-        const detached = branch === "HEAD";
-
-        return {
-          name: app.name,
-          present: true,
-          path: app.path,
-          branch,
-          drift: !detached && branch !== group.name,
-          detached,
-          tree: tree
-            ? { ...tree, clean: tree.staged === 0 && tree.unstaged === 0 && tree.untracked === 0 }
-            : null,
-          env,
-          error: null,
-        };
-      } catch (error) {
-        // One broken worktree must not sink the whole report.
-        return {
-          name: app.name,
-          present: true,
-          path: app.path,
-          branch: null,
-          drift: false,
-          detached: false,
-          tree: null,
-          env,
-          error: String(error),
-        };
-      }
-    })
-  );
-}
-
-function buildAttention(group: ResolvedGroup, apps: AppReport[]): Attention[] {
-  const attention: Attention[] = [];
-
-  for (const app of apps) {
-    if (!app.present) {
-      attention.push({
-        app: app.name,
-        kind: "missing-worktree",
-        message: "no worktree in this workspace",
-        fix: `jade workspace add ${group.name}`,
-      });
-      continue;
-    }
-
-    if (app.error) {
-      attention.push({
-        app: app.name,
-        kind: "git-error",
-        message: `could not read git state: ${app.error}`,
-      });
-      continue;
-    }
-
-    if (app.detached) {
-      attention.push({
-        app: app.name,
-        kind: "detached-head",
-        message: "detached HEAD, not on a branch",
-        // `jade checkout --app` resolves the app relative to cwd.
-        fix: `cd ${group.path} && jade checkout ${group.name} --app ${app.name}`,
-      });
-    } else if (app.drift) {
-      attention.push({
-        app: app.name,
-        kind: "branch-drift",
-        message:
-          `on '${app.branch}', not '${group.name}' ` +
-          `(the branch was likely already checked out in another workspace)`,
-        fix: `cd ${group.path} && jade checkout ${group.name} --app ${app.name}`,
-      });
-    }
-
-    if (app.env && !app.env.present && app.env.sourceAvailable) {
-      attention.push({
-        app: app.name,
-        kind: "missing-env",
-        message: ".env missing, source available",
-        fix: "jade env sync",
-      });
-    }
-  }
-
-  return attention;
-}
-
-/**
- * Query herdr for whether this group is open in the current session. Best
- * effort by design: status must never fail because herdr is unreachable.
- */
-async function collectHerdr(
+async function collectHerdrTui(
   groupName: string,
-  runHerdr: HerdrRunner
-): Promise<HerdrReport | null> {
+  runHerdrTui: HerdrTuiRunner
+): Promise<HerdrTuiReport | null> {
   if (process.env.HERDR_ENV !== "1") return null;
 
   try {
-    const found = findWorkspaceByLabel(await runHerdr(["workspace", "list"]), groupName);
+    const found = findWorkspaceByLabel(await runHerdrTui(["workspace", "list"]), groupName);
     if (!found) return { open: false, focused: false, workspaceId: null };
     return { open: true, focused: found.focused, workspaceId: found.workspaceId };
   } catch {
@@ -313,7 +155,7 @@ async function collectHerdr(
 
 export function makeStatusCommand(
   git: GitBackend = realGitBackend,
-  runHerdr: HerdrRunner = defaultRunHerdr,
+  runHerdrTui: HerdrTuiRunner = defaultRunHerdrTui,
   fs: FileSystemBackend = realFileSystemBackend,
   config: ConfigBackend = realConfigBackend
 ) {
@@ -381,7 +223,8 @@ export function makeStatusCommand(
         }
 
         const asJson = args.json as boolean;
-        const apps = await collectApps(workspaceRoot, group, git, fs, asJson);
+        const meta = await readGroupMeta(group.path, fs);
+        const apps = await collectApps(workspaceRoot, group, git, fs, jadeConfig, meta, asJson);
 
         if (!asJson) {
           printWorkspaceStatus(group, apps);
@@ -389,8 +232,8 @@ export function makeStatusCommand(
         }
 
         // Only the JSON view carries the full picture, so only it pays for the
-        // extra gathering — including the herdr subprocess.
-        const herdr = await collectHerdr(group.name, runHerdr);
+        // extra gathering — including the herdr-tui subprocess.
+        const herdr = await collectHerdrTui(group.name, runHerdrTui);
         printWorkspaceStatusJson(
           workspaceRoot,
           jadeConfig.orgUrl,

@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { join } from "path";
 import { homedir } from "os";
-import { makeSkillsInstallCommand } from "../skills.ts";
+import { makeSkillsInstallCommand } from "../skills/install.ts";
 import { createMockFileSystemBackend } from "../../test/mock-filesystem-backend.ts";
 import { expectsExit } from "../../test/helpers.ts";
 

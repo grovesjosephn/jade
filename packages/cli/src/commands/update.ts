@@ -1,9 +1,9 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { intro, outro, cancel, log, spinner } from "@clack/prompts";
-import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, listBareRepos } from "../utils/workspace.ts";
-import { type GitBackend, realGitBackend } from "../utils/git-backend.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
+import { intro, outro, cancel, log, spinner } from "../adapters/ui.ts";
+import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, listBareRepos } from "../core/layout.ts";
+import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 
 export function makeUpdateCommand(
   git: GitBackend = realGitBackend,
@@ -50,6 +50,7 @@ export function makeUpdateCommand(
       if (verbose) intro(`Updating main workspace`);
 
       const updated: string[] = [];
+      const localOnly: string[] = [];
       const failed: { name: string; error: unknown }[] = [];
       const s = verbose ? spinner() : undefined;
 
@@ -58,6 +59,10 @@ export function makeUpdateCommand(
         const appWorktreePath = resolve(mainPath, appName);
 
         if (!await fs.pathExists(appWorktreePath)) continue;
+        if (!(await git.hasOrigin(bareRepoPath))) {
+          localOnly.push(appName);
+          continue;
+        }
 
         s?.start(`Updating ${appName}`);
         try {
@@ -73,12 +78,14 @@ export function makeUpdateCommand(
 
       if (verbose) {
         if (updated.length > 0) log.success(`Updated: ${updated.join(", ")}`);
+        if (localOnly.length > 0) log.info(`Skipped, not published yet: ${localOnly.join(", ")}`);
         if (failed.length > 0) log.warn(`Failed: ${failed.map((f) => f.name).join(", ")}`);
         outro(`Done`);
       } else {
         const parts: string[] = [];
         if (updated.length > 0) parts.push(`${updated.length} updated`);
         if (failed.length > 0) parts.push(`${failed.length} failed`);
+        if (localOnly.length > 0) parts.push(`${localOnly.length} local only`);
         const summary = parts.length > 0 ? parts.join(", ") : "nothing to update";
         log.info(`main: ${summary}`);
         for (const { name, error } of failed) {

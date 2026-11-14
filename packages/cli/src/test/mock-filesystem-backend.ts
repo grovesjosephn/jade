@@ -1,7 +1,7 @@
 import { dirname, resolve, basename, sep } from "path";
 import { readFile } from "fs/promises";
-import type { FileSystemBackend } from "../utils/fs-backend.ts";
-import { fsExists, fsListDirectories, fsRemove } from "../utils/fs.ts";
+import type { FileSystemBackend } from "../adapters/fs-backend.ts";
+import { fsExists, fsListDirectories, fsRemove } from "../adapters/fs.ts";
 
 type VirtualEntry = { type: "dir" } | { type: "file"; content: string };
 
@@ -130,6 +130,19 @@ export function createMockFileSystemBackend(): MockFileSystemBackend {
       }
 
       setFile(dest, content);
+    },
+
+    /**
+     * Virtual content first; falls back to the real file for paths this fake
+     * never touched (same reconciliation as pathExists).
+     */
+    async readFile(path: string): Promise<string | null> {
+      record("readFile", path);
+      const normalized = resolve(path);
+      if (removed.has(normalized)) return null;
+      const entry = entries.get(normalized);
+      if (entry) return entry.type === "file" ? entry.content : null;
+      return (await fsExists(path)) ? await readFile(path, "utf8") : null;
     },
 
     /**

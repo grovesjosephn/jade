@@ -3,7 +3,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { $ } from "bun";
 import { expect } from "bun:test";
-import { gitCloneBare } from "../utils/git.ts";
+import { gitCloneBare } from "../adapters/git.ts";
 
 export interface TempDir {
   path: string;

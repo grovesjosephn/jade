@@ -1,11 +1,35 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { intro, outro, cancel, log, spinner } from "@clack/prompts";
-import { findWorkspaceRoot, getBarePath, listWorktreeDirs, listBareRepos } from "../utils/workspace.ts";
-import { removeAppFromConfig } from "../utils/config.ts";
-import { type GitBackend, realGitBackend } from "../utils/git-backend.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
-import { type ConfigBackend, realConfigBackend } from "../utils/config-backend.ts";
+import { intro, outro, cancel, log, spinner } from "../adapters/ui.ts";
+import { findWorkspaceRoot, getBarePath, listWorktreeDirs, listBareRepos } from "../core/layout.ts";
+import { removeAppFromConfig } from "../core/config.ts";
+import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
+import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
+
+/**
+ * What would be lost by deleting an app's bare repo and worktrees: no remote
+ * at all, local branches with commits origin doesn't have (as of the last
+ * fetch), and worktrees with uncommitted changes.
+ */
+async function findUnsavedWork(git: GitBackend, bareRepoPath: string): Promise<string[]> {
+  const risks: string[] = [];
+  if (!(await git.hasOrigin(bareRepoPath))) {
+    risks.push(`never published: .bare/ is the only copy (see 'jade publish')`);
+  } else {
+    const unpushed = await git.unpushedBranches(bareRepoPath);
+    if (unpushed.length > 0) risks.push(`unpushed commits on: ${unpushed.join(", ")}`);
+  }
+  for (const wt of await git.worktreeList(bareRepoPath)) {
+    try {
+      const st = await git.status(wt.path);
+      if (st.staged + st.unstaged + st.untracked > 0) risks.push(`uncommitted changes in ${wt.path}`);
+    } catch {
+      // A worktree git can't read is reported by `jade status`; don't block on it.
+    }
+  }
+  return risks;
+}
 
 export function makeRemoveCommand(
   git: GitBackend = realGitBackend,
@@ -22,6 +46,12 @@ export function makeRemoveCommand(
         type: "positional",
         description: "App name to remove",
         required: true,
+      },
+      force: {
+        type: "boolean",
+        alias: "f",
+        description: "Remove even if it holds work that exists nowhere else",
+        default: false,
       },
       workspace: {
         type: "string",
@@ -52,6 +82,20 @@ export function makeRemoveCommand(
           : "";
         cancel(`App '${appName}' not found in .bare/${hint}`);
         process.exit(1);
+      }
+
+      // Removing deletes the bare repo and force-removes every worktree, so
+      // anything not on a remote is gone for good. Check before touching it.
+      if (!args.force) {
+        const risks = await findUnsavedWork(git, bareRepoPath);
+        if (risks.length > 0) {
+          cancel(
+            `Not removing '${appName}': it holds work that exists nowhere else.\n` +
+              risks.map((r) => `  - ${r}`).join("\n") +
+              `\n  Push or commit what you need, or re-run with --force to delete it anyway.`
+          );
+          process.exit(1);
+        }
       }
 
       try {

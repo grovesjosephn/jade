@@ -1,9 +1,9 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
-import { intro, outro, cancel, log } from "@clack/prompts";
-import { getBarePath, getMainWorktreePath, getWorktreeContainerPath } from "../utils/workspace.ts";
-import { type FileSystemBackend, realFileSystemBackend } from "../utils/fs-backend.ts";
-import { type ConfigBackend, realConfigBackend } from "../utils/config-backend.ts";
+import { intro, outro, cancel, log } from "../adapters/ui.ts";
+import { getBarePath, getMainWorktreePath, getWorktreeContainerPath } from "../core/layout.ts";
+import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
+import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
 
 export function makeInitCommand(
   fs: FileSystemBackend = realFileSystemBackend,

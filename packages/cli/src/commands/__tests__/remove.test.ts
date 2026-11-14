@@ -1,7 +1,7 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { join } from "path";
-import { getAppNames } from "../../utils/config.ts";
-import { listBareRepos } from "../../utils/workspace.ts";
+import { getAppNames } from "../../core/config.ts";
+import { listBareRepos } from "../../core/layout.ts";
 import { makeRemoveCommand } from "../remove.ts";
 import { makeAddCommand } from "../add.ts";
 import { createTempDir, expectsExit } from "../../test/helpers.ts";

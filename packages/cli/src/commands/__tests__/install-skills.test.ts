@@ -6,7 +6,7 @@ import {
   installBundledSkillPackages,
   resolveSkillsInstallTargets,
   detectSkillsInstallTargets,
-} from "../../utils/install-skills.ts";
+} from "../../bundled-skills/install.ts";
 import { createMockFileSystemBackend } from "../../test/mock-filesystem-backend.ts";
 
 /**

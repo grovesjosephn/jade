@@ -1,92 +1,46 @@
 ---
 name: jade-review
 description: >-
-  Documents a workflow for assembling a ticket-scoped review workspace
-  (workspace/<ticket-id>/ containing only the apps with a matching branch or
-  PR) built entirely from existing jade commands (workspace add, checkout,
-  update, workspace remove) plus plain git/gh for discovery. Use when asked to
-  review, check out, or pull up a ticket or PR by id across a jade multi-repo
-  workspace, or when the user mentions reviewing a ticket across multiple
-  apps/repos.
+  Reviewing a ticket or PR across a jade multi-repo workspace with `jade
+  review <ticket-id>`, which builds workspace/<ticket-id>/ containing only the
+  apps with a matching branch or open PR, each on its real branch. Use when
+  asked to review, check out, or pull up a ticket or PR by id across several
+  apps/repos in a jade workspace.
 ---
 
 # Jade review
 
-## Mental model
+A review workspace is a normal `workspace/<ticket-id>/` group (see [[jade-workspace]]) whose membership comes from a search: every app is fetched and searched for the ticket id, and only the apps with exactly one match are checked out. Each one sits on its real branch, so there are no placeholder branches.
 
-A review workspace is a **normal `workspace/<ticket-id>/` group** — nothing new is created in jade itself. What's different is *how its membership is decided*: instead of hand-picking apps, you search every configured app for a branch or PR matching a ticket id, then narrow the group down to just the apps where something matched. See [[jade-workspace]] for the general group/worktree mental model this builds on.
+## Run it
 
-There is currently no `jade review` command. This skill is a recipe using commands that already exist.
-
-## Workflow
-
-Given a ticket id, e.g. `JADE-01`:
-
-1. **Refresh remote data.** Run `jade update` so `main/`'s worktrees — and therefore each bare repo's `origin/*` remote-tracking refs — are current. This fetches from `origin` with the default refspec, which updates all of that remote's tracking branches, not just the current one.
-
-   ```bash
-   jade update
-   ```
-
-2. **Search each configured app for a match.** For every app (see `jade status --root` or `jade.json`'s `apps`), check for a branch or open PR referencing the ticket:
-
-   ```bash
-   # If gh is installed and orgUrl is set — search PR titles.
-   # owner comes from orgUrl (e.g. https://github.com/myorg -> myorg); repo == app name.
-   gh pr list --repo <owner>/<app> --search "JADE-01 in:title" --json headRefName,title,number
-
-   # Always also check branch names directly (local + remote-tracking).
-   git -C .bare/<app> branch -a | grep -i jade-01
-   ```
-
-   These are plain shell commands you run per app — not jade commands. If an app has more than one distinct matching branch (from either source), treat it as **ambiguous**: don't guess, flag it for the user to resolve by hand.
-
-3. **Scaffold the group with just the matched apps.** `jade workspace add` takes a non-interactive `--apps <list>` flag — pass it exactly the apps with a match (comma-separated, no spaces):
-
-   ```bash
-   jade workspace add JADE-01 --apps app1,app2
-   ```
-
-   This checks out a branch literally named `JADE-01` in each named app. For apps where that exact branch doesn't already exist, jade creates a new, empty local branch of that name from the bare repo's HEAD — harmless, but see Pitfalls below. Ambiguous or unmatched apps are simply left out of `--apps`, so there's no drop-afterward step.
-
-4. **Point matched apps at their real branch.** For each app with exactly one match, check out the real branch — run this from the workspace root, no `cd` required:
-
-   ```bash
-   jade checkout <matched-branch> --app workspace/JADE-01/<app>
-   ```
-
-   `jade checkout` (without `-c`) runs a plain `git checkout <branch>`, so git's own behavior transparently creates a correct local tracking branch when `<branch>` only exists as `origin/<branch>` — you get the real PR content, not an empty branch.
-
-5. **Report.** Summarize which apps were kept (with their branch/PR) and which were flagged ambiguous for manual follow-up.
-
-When the review is done, clean up with:
+From anywhere inside the workspace (or pass `-w <root>`):
 
 ```bash
-jade workspace remove JADE-01 -d   # -d also deletes the placeholder/review branches
+jade review JADE-01 --dry-run   # see what matches, change nothing
+jade review JADE-01
 ```
 
-## Command reference
+- **Matching:** branch names (local and `origin/*`, after a fetch) containing the id, case-insensitive and bounded, so `JADE-1` does not match `JADE-12`. When `orgUrl` is set and `gh` works, open PRs whose title contains the id add their head branch too. A missing or unauthenticated `gh` just means branch-name matching only; `--no-gh` skips it on purpose.
+- **Exactly one candidate** in an app: that app is checked out on it, tracking `origin/<branch>`. A local copy left from an earlier review is fast-forwarded to the PR's latest commit; if it has diverged, it's left as is with a warning.
+- **Several candidates:** the app is left out and listed as ambiguous. Don't pick one yourself; show the user the candidates and re-run with their choice: `jade review JADE-01 --pick web=JADE-01-ui`. Re-running adds to the existing review group and leaves apps already in it alone.
+- **A PR branch that isn't on origin** (usually a fork) is reported and skipped.
+- `--apps a,b` limits the search.
 
-| Command | Role in this workflow |
-|---|---|
-| `jade update` | Refresh remote-tracking branches before searching. |
-| `jade workspace add <name> --apps app1,app2` | Scaffold the group with exactly the matched apps, non-interactively. |
-| `jade checkout <branch> --app workspace/<name>/<app>` | Point a matched app at its real branch; handles remote-only branches via git's own checkout behavior. |
-| `jade workspace remove <name> -d` | Tear down the review workspace and delete the branches it created, including placeholders. |
+It exits non-zero when nothing could be created or only ambiguous matches were found. Report back which apps were checked out (with branch and PR number), which were ambiguous, and which had no match, as `jade review` prints them.
 
-## Pitfalls
+## While reviewing
 
-- **Placeholder branches**: step 3 creates a branch literally named `<ticket-id>` in each app passed to `--apps`. This is a harmless but real side effect — `jade workspace remove <name> -d` cleans it up.
-- **`gh` is optional**: if it's not installed or not authenticated, you just fall back to branch-name search — that's expected, not an error.
-- **Ambiguous matches need a human**: if an app has more than one candidate branch/PR, don't pick automatically — surface both and let the user decide, and leave it out of `--apps` until resolved.
-- **Owner/repo assumption**: PR search assumes the app's directory name in `.bare/` equals its GitHub repo name, and that `orgUrl` resolves to the right owner — same assumption jade already makes when cloning via `jade add <repo-name>`.
-- **No `jade review` command exists**: this is a manual/agent-driven recipe over existing commands, not a single command invocation.
+The group records each app's expected branch in `workspace/<ticket-id>/.jade-group.json`. `jade status` and `jade doctor` use it, so the PR branches don't show as `[drift]` and left-out apps aren't reported missing. Don't edit or delete that file by hand.
 
-## Where to install this skill
+Useful alongside: `jade exec -- git log --oneline origin/main..HEAD` (or any command) runs in every app of the group; `jade open JADE-01` opens it in herdr-tui/tmux.
 
-- **Project**: from the target repo root, run `jade skills install` (optional `--project <dir>`, `--target cursor|claude|all`) — auto-detects and copies bundled skills into `.cursor/skills/` and/or `.claude/skills/`.
-- **Personal**: run `jade skills install --scope user` to install into `~/.cursor/skills/` and/or `~/.claude/skills/` for use across all projects.
+If an app's branch was already checked out in another workspace, git can't check it out twice, so the review uses a suffixed branch on the same commit (`<branch>-<hash>`) and says so.
 
-## Out of scope here
+## Clean up
 
-For the general workspace/worktree layout and lifecycle, see [[jade-workspace]]. For first-time setup, see [[jade-setup]].
+```bash
+jade workspace remove JADE-01
+```
+
+Don't add `-d`: it deletes a branch named after the group (`JADE-01`), which a review doesn't create. The local tracking branches the review created stay in each bare repo; delete one with `git -C .bare/<app> branch -d <branch>` if it's no longer wanted.

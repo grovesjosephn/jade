@@ -3,7 +3,7 @@ import { join } from "path";
 import { mkdir } from "fs/promises";
 import { makeStatusCommand, resolveStatusTarget } from "../status.ts";
 import { makeAddCommand } from "../add.ts";
-import { makeWorkspaceAddCommand, type SelectAppsFn } from "../workspace.ts";
+import { makeWorkspaceAddCommand, type SelectAppsFn } from "../workspace/add.ts";
 
 const selectAll: SelectAppsFn = async (apps) => apps;
 import {
@@ -14,7 +14,7 @@ import {
 import { createMockGitBackend } from "../../test/mock-git-backend.ts";
 import initCommand from "../init.ts";
 import pkg from "../../../package.json" with { type: "json" };
-import type { HerdrRunner } from "../../utils/herdr.ts";
+import type { HerdrTuiRunner } from "../../adapters/herdr-tui.ts";
 
 describe("status command", () => {
   let tempDir: Awaited<ReturnType<typeof createTempDir>>;
@@ -229,9 +229,9 @@ describe("status command — workspace view", () => {
     name: string,
     mock: ReturnType<typeof createMockGitBackend>,
     extra: Record<string, unknown> = {},
-    runHerdr?: HerdrRunner
+    runHerdrTui?: HerdrTuiRunner
   ) {
-    const cmd = makeStatusCommand(mock.git, runHerdr ?? (async () => "{}"));
+    const cmd = makeStatusCommand(mock.git, runHerdrTui ?? (async () => "{}"));
     return withCapturedConsole(() =>
       cmd.run!({ args: { name, workspace: workspacePath, ...extra } } as any)
     );
@@ -249,7 +249,7 @@ describe("status command — workspace view", () => {
     expect(out).toContain("feat-x");
   });
 
-  test("stays terse: no version, root, path, herdr or attention block", async () => {
+  test("stays terse: no version, root, path, herdr-tui or attention block", async () => {
     const { workspacePath, mock } = await setup({ apps: ["app1"], group: "feat-x" });
 
     const logs = await runStatus(workspacePath, "feat-x", mock);
@@ -443,12 +443,12 @@ describe("status command — workspace view", () => {
     expect(out).toContain("(error)");
   });
 
-  describe("herdr state", () => {
+  describe("herdr-tui state", () => {
     const listOutput = JSON.stringify({
       result: { workspaces: [{ label: "feat-x", workspace_id: "ws_1", focused: true }] },
     });
 
-    test("is absent from --json outside a herdr session", async () => {
+    test("is absent from --json outside a herdr-tui session", async () => {
       delete process.env.HERDR_ENV;
       const { workspacePath, mock } = await setup({ apps: ["app1"], group: "feat-x" });
 
@@ -460,7 +460,7 @@ describe("status command — workspace view", () => {
       expect(json.herdr).toBeUndefined();
     });
 
-    test("reports open and focused in --json inside a herdr session", async () => {
+    test("reports open and focused in --json inside a herdr-tui session", async () => {
       process.env.HERDR_ENV = "1";
       const { workspacePath, mock } = await setup({ apps: ["app1"], group: "feat-x" });
 
@@ -472,7 +472,7 @@ describe("status command — workspace view", () => {
       expect(json.herdr).toEqual({ open: true, focused: true, workspaceId: "ws_1" });
     });
 
-    test("reports not open when herdr has no workspace for the group", async () => {
+    test("reports not open when herdr-tui has no workspace for the group", async () => {
       process.env.HERDR_ENV = "1";
       const { workspacePath, mock } = await setup({ apps: ["app1"], group: "other" });
 
@@ -484,14 +484,14 @@ describe("status command — workspace view", () => {
       expect(json.herdr).toEqual({ open: false, focused: false, workspaceId: null });
     });
 
-    test("--json still renders when herdr is unreachable", async () => {
+    test("--json still renders when herdr-tui is unreachable", async () => {
       process.env.HERDR_ENV = "1";
       const { workspacePath, mock } = await setup({ apps: ["app1"], group: "feat-x" });
 
       const json = JSON.parse(
         (
           await runStatus(workspacePath, "feat-x", mock, { json: true }, async () => {
-            throw new Error("herdr not running");
+            throw new Error("herdr-tui not running");
           })
         ).join("")
       );
@@ -499,7 +499,7 @@ describe("status command — workspace view", () => {
       expect(json.herdr).toBeUndefined();
     });
 
-    test("the text view never spawns herdr", async () => {
+    test("the text view never spawns herdr-tui", async () => {
       process.env.HERDR_ENV = "1";
       const { workspacePath, mock } = await setup({ apps: ["app1"], group: "feat-x" });
 
