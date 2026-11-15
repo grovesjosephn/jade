@@ -474,6 +474,14 @@ export async function gitInitRepo(bareRepoPath: string, worktreePath: string, br
  * Whether the repo has an `origin` remote. Apps made with `jade create` have
  * none until `jade publish`, and their bare repo is then the only copy.
  */
+export async function gitHasLocalBranch(bareRepoPath: string, branch: string): Promise<boolean> {
+  const { exitCode } = await realGitProcessRunner.run(
+    ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+    { cwd: bareRepoPath, nothrow: true }
+  );
+  return exitCode === 0;
+}
+
 export async function gitHasOrigin(bareRepoPath: string): Promise<boolean> {
   const { exitCode } = await realGitProcessRunner.run(["config", "--get", "remote.origin.url"], {
     cwd: bareRepoPath,

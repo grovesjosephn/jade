@@ -288,6 +288,11 @@ export function createMockGitBackend(): MockGitBackend {
       );
     },
 
+    async hasLocalBranch(bareRepoPath: string, branch: string): Promise<boolean> {
+      record("hasLocalBranch", bareRepoPath, branch);
+      return ensureState(bareRepoPath).branches.has(branch);
+    },
+
     async hasOrigin(bareRepoPath: string): Promise<boolean> {
       record("hasOrigin", bareRepoPath);
       return ensureState(bareRepoPath).hasOrigin;

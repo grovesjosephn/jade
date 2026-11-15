@@ -3,6 +3,7 @@ import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "../../adapters/ui.ts";
 import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, listBareRepos } from "../../core/layout.ts";
 import { type GitBackend, realGitBackend } from "../../adapters/git-backend.ts";
+import { GitError } from "../../adapters/git-process.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs-backend.ts";
 
 export function makeWorkspaceRemoveCommand(
@@ -95,8 +96,15 @@ export function makeWorkspaceRemoveCommand(
           const deleted: string[] = [];
           const skipped: string[] = [];
           const notForced: string[] = [];
+          const failed: string[] = [];
 
+          // Only apps that have the branch locally; the rest have nothing to delete.
+          const withBranch: string[] = [];
           for (const appName of bareRepos) {
+            if (await git.hasLocalBranch(resolve(barePath, appName), name)) withBranch.push(appName);
+          }
+
+          for (const appName of withBranch) {
             const mainAppPath = resolve(workspaceRoot, "main", appName);
             if (await fs.pathExists(mainAppPath)) {
               // An unpublished app has no other copy of the branch, so -f would
@@ -105,13 +113,22 @@ export function makeWorkspaceRemoveCommand(
               try {
                 await git.deleteBranch(mainAppPath, name, force && !unpublished);
                 deleted.push(appName);
-              } catch {
-                (unpublished ? notForced : skipped).push(appName);
+              } catch (error) {
+                const reason =
+                  error instanceof GitError
+                    ? (error.stderr.trim().split("\n")[0] ?? "")
+                    : error instanceof Error
+                      ? error.message
+                      : String(error);
+                if (/not fully merged/.test(reason)) (unpublished ? notForced : skipped).push(appName);
+                else failed.push(`${appName} (${reason.replace(/^error:\s*/, "")})`);
               }
             }
           }
 
-          branchSpinner.stop(`Branch deletion complete`);
+          branchSpinner.stop(
+            withBranch.length > 0 ? `Branch deletion complete` : `No app has a local branch '${name}'`
+          );
 
           if (deleted.length > 0) {
             log.success(`Deleted branch '${name}' in: ${deleted.join(", ")}`);
@@ -121,6 +138,9 @@ export function makeWorkspaceRemoveCommand(
               `Skipped (unmerged changes): ${skipped.join(", ")}` +
               (!force ? `\n  Use -f to force delete` : "")
             );
+          }
+          if (failed.length > 0) {
+            log.warn(`Could not delete branch '${name}' in: ${failed.join(", ")}`);
           }
           if (notForced.length > 0) {
             log.warn(

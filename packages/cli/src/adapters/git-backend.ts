@@ -41,6 +41,8 @@ export interface GitBackend {
   currentBranch(cwd: string): Promise<string>;
   status(cwd: string): Promise<WorktreeStatus>;
   deleteBranch(cwd: string, branch: string, force?: boolean): Promise<void>;
+  /** Whether the repo has a local branch named `branch` (remote-tracking ones don't count) */
+  hasLocalBranch(bareRepoPath: string, branch: string): Promise<boolean>;
   removeBareRepo(barePath: string): Promise<void>;
   fetch(bareRepoPath: string): Promise<void>;
   pullFF(cwd: string): Promise<void>;
@@ -75,6 +77,7 @@ import {
   gitCurrentBranch,
   gitStatus,
   gitDeleteBranch,
+  gitHasLocalBranch,
   gitRemoveBareRepo,
   gitFetch,
   gitPullFF,
@@ -102,6 +105,7 @@ export const realGitBackend: GitBackend = {
   currentBranch: gitCurrentBranch,
   status: gitStatus,
   deleteBranch: gitDeleteBranch,
+  hasLocalBranch: gitHasLocalBranch,
   removeBareRepo: gitRemoveBareRepo,
   fetch: gitFetch,
   pullFF: gitPullFF,

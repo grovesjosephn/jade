@@ -392,6 +392,62 @@ describe("workspace remove command", () => {
     expect(await fs.pathExists(join(workspacePath, "workspace", "feat-x"))).toBe(false);
   });
 
+  describe("--delete-branches", () => {
+    /** A workspace with apps a, b and c; group feat-x holds only the given apps */
+    const setup = async (inGroup: string[]) => {
+      tempDir = await createTempDir();
+      const workspacePath = join(tempDir.path, "ws");
+      const { fs } = createMockFileSystemBackend();
+      const { config } = createMockConfigBackend();
+      await makeInitCommand(fs, config).run!({ args: { path: workspacePath } } as any);
+      const { git, calls } = createMockGitBackend();
+      for (const app of ["a", "b", "c"]) {
+        await makeAddCommand(git, fs, config).run!({
+          args: { repoNameOrUrl: `https://github.com/org/${app}`, name: app, workspace: workspacePath },
+        } as any);
+      }
+      await makeWorkspaceAddCommand(git, selectAll, fs).run!({
+        args: { name: "feat-x", apps: inGroup.join(","), workspace: workspacePath },
+      } as any);
+      return { workspacePath, git, fs, calls };
+    };
+
+    const remove = (git: any, fs: any, workspacePath: string) =>
+      withCapturedConsole(() =>
+        makeWorkspaceRemoveCommand(git, fs).run!({
+          args: { name: "feat-x", deleteBranches: true, workspace: workspacePath },
+        } as any)
+      );
+
+    test("leaves apps without the branch out of the report", async () => {
+      const { workspacePath, git, fs, calls } = await setup(["a"]);
+      const out = (await remove(git, fs, workspacePath)).join("\n");
+
+      expect(out).toMatch(/Deleted branch 'feat-x' in: a$/m);
+      expect(out).not.toContain("Skipped");
+      expect(calls.filter((c) => c.method === "deleteBranch")).toHaveLength(1);
+    });
+
+    test("says unmerged only for git's not-fully-merged refusal, and gives other reasons as they are", async () => {
+      const { workspacePath, git, fs } = await setup(["a", "b", "c"]);
+      const { GitError } = await import("../../adapters/git-process.ts");
+      const failing = {
+        ...git,
+        deleteBranch: async (cwd: string, branch: string) => {
+          if (cwd.endsWith("/a")) return git.deleteBranch(cwd, branch);
+          const stderr = cwd.endsWith("/b")
+            ? `error: the branch '${branch}' is not fully merged`
+            : `error: cannot delete branch '${branch}' used by worktree at '/x'`;
+          throw new GitError(["branch", "-d", branch], cwd, 1, stderr);
+        },
+      };
+      const out = (await remove(failing, fs, workspacePath)).join("\n");
+
+      expect(out).toContain("Skipped (unmerged changes): b");
+      expect(out).toContain("Could not delete branch 'feat-x' in: c (cannot delete branch 'feat-x' used by worktree at '/x')");
+    });
+  });
+
   test("prevents removal of main", async () => {
     tempDir = await createTempDir();
     const workspacePath = join(tempDir.path, "ws");

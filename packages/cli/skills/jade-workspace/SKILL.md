@@ -55,7 +55,7 @@ Commands resolve the workspace root by **walking up from cwd** until a `.bare/` 
 | `jade review <ticket> [--pick app=branch] [--no-gh] [--dry-run]` | Build `workspace/<ticket>/` from the apps whose branch or open PR matches the ticket, each on its real branch. See [[jade-review]]. |
 | `jade exec [-g group] [--apps a,b] [-p] -- <cmd...>` | Run a command in every app of a group (current group by default), with `JADE_APP`/`JADE_GROUP`/`JADE_ROOT` set; exits non-zero if any app failed. |
 | `jade doctor [group] [--dry-run] [--add-missing] [--json]` | Apply the fixes `jade status` reports (drift, detached HEAD, missing `.env`; missing worktrees with `--add-missing`). Skips dirty worktrees and branches checked out elsewhere; exits non-zero while problems remain (with `--dry-run`, while anything would be fixed). |
-| `jade workspace remove <name> [-d] [-f] [-w path]` | Remove group worktrees and delete `workspace/<name>/`. **Cannot remove `main`.** `-d` deletes branch `<name>` in apps (from `main/<app>` as reference); `-f` force-deletes branches. |
+| `jade workspace remove <name> [-d] [-f] [-w path]` | Remove group worktrees and delete `workspace/<name>/`. **Cannot remove `main`.** `-d` deletes branch `<name>` in the apps that have it locally (from `main/<app>` as reference), and says which ones it skipped as unmerged and which failed for another reason; `-f` force-deletes branches. |
 
 ## Reading `jade status`
 
