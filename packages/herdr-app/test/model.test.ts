@@ -7,6 +7,7 @@ import {
   mostUrgent,
   orderGroups,
   problems,
+  shownApps,
   spaceForGroup,
   summary,
   tilde,
@@ -107,5 +108,16 @@ describe("jade herdr-app model", () => {
   test("tilde shortens paths under home only", () => {
     expect(tilde("/home/me/Projects", "/home/me")).toBe("~/Projects");
     expect(tilde("/home/meow", "/home/me")).toBe("/home/meow");
+  });
+
+  test("shownApps: none for main, only held apps for other groups", () => {
+    const apps = [
+      { name: "a", present: true },
+      { name: "b", present: false },
+      { name: "c", present: true },
+    ];
+    expect(shownApps({ workspace: "main", apps })).toEqual([]);
+    expect(shownApps({ workspace: "feat-x", apps }).map((a) => a.name)).toEqual(["a", "c"]);
+    expect(shownApps({ workspace: "JADE-1" })).toEqual([]);
   });
 });

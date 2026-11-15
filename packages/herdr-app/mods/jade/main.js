@@ -22,6 +22,7 @@ import {
   placeOf,
   problems,
   spaceForGroup,
+  shownApps,
   summary,
   tilde,
   validGroupName,
@@ -327,6 +328,7 @@ export default class Jade extends View {
     const kind = isTicket(report.workspace) ? "review" : null;
     const stripe = status === "blocked" ? t.blocked : status === "working" ? t.working : fixes.length ? t.ansi3 : space ? t.accent : t.border;
     const fixKey = `fix-${report.workspace}`;
+    const apps = shownApps(report);
     return h_flex()
       .id(`card-${report.workspace}`)
       .flex_none()
@@ -364,10 +366,10 @@ export default class Jade extends View {
               )
           )
           .when(Boolean(report.failed), (el) => el.child(div().px(12).pb(10).text_size(12).text_color(t.blocked).child(report.failed)))
-          .when(!report.failed && (report.apps ?? []).length === 0, (el) =>
+          .when(!report.failed && report.workspace !== "main" && apps.length === 0, (el) =>
             el.child(div().px(12).pb(8).text_size(12).text_color(t.dim).child("No apps yet: jade add <repo>, or jade create <name> for a new one."))
           )
-          .children((report.apps ?? []).map((app, i) => this.appRow(report, app, i, ctx)))
+          .children(apps.map((app, i) => this.appRow(report, app, i, ctx)))
           .when(fixes.length > 0, (el) =>
             el.child(
               h_flex()
@@ -427,11 +429,11 @@ export default class Jade extends View {
               .size(28)
               .flex_none()
               .rounded(8)
-              .bg(t.ansi2 + "22")
+              .bg(t.accent + "22")
               .flex()
               .items_center()
               .justify_center()
-              .child(svg(ICON("jade")).size(16).text_color(t.ansi2))
+              .child(svg(ICON("jade")).size(16).text_color(t.accent))
           )
           .child(
             v_flex()
@@ -519,7 +521,7 @@ export default class Jade extends View {
       .justify_center()
       .gap(12)
       .p(24)
-      .child(svg(ICON("jade")).size(34).text_color(looking ? t.dim : t.ansi2).when(looking, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 1200 })))
+      .child(svg(ICON("jade")).size(34).text_color(looking ? t.dim : t.accent).when(looking, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 1200 })))
       .child(div().text_size(14).font_semibold().text_color(t.foreground).child(looking ? "Looking for a jade root…" : "Not in a jade root"))
       .when(!looking, (el) =>
         el

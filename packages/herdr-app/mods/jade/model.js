@@ -77,6 +77,13 @@ export function changes(tree) {
  */
 export const problems = (report) => (report?.attention ?? []).filter((a) => a.kind !== "unpublished");
 
+/**
+ * The app rows a group's card lists. main lists none: its card is just a way
+ * to open it. Other groups list only the apps they hold a worktree of, not
+ * every app in the root.
+ */
+export const shownApps = (report) => (report.workspace === "main" ? [] : (report.apps ?? []).filter((a) => a.present));
+
 /** Totals for the header line. */
 export function summary(reports) {
   const apps = new Set();
