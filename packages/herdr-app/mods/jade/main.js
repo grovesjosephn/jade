@@ -274,62 +274,81 @@ export default class Jade extends View {
     const state = appState(app);
     const here = app.present ? agentsIn(app.path, ags, ps) : [];
     const status = mostUrgent(here.map((a) => a.status));
+    const warn = state.kind === "drift" || state.kind === "detached" || state.kind === "error";
     const glyph = {
-      clean: svg(ICON("check")).size(12).text_color(t.dim),
-      dirty: div().size(7).mx(2.5).rounded_full().bg(t.ansi3),
-      drift: svg(ICON("alert")).size(12).text_color(t.blocked),
-      detached: svg(ICON("alert")).size(12).text_color(t.blocked),
-      error: svg(ICON("alert")).size(12).text_color(t.blocked),
-      missing: div().size(7).mx(2.5).rounded_full().border(1.5).border_color(t.dim),
+      clean: svg(ICON("check")).size(11).text_color(t.dim),
+      dirty: div().size(6).rounded_full().bg(t.ansi3),
+      drift: svg(ICON("alert")).size(11).text_color(t.blocked),
+      detached: svg(ICON("alert")).size(11).text_color(t.blocked),
+      error: svg(ICON("alert")).size(11).text_color(t.blocked),
+      missing: div().size(6).rounded_full().border(1.5).border_color(t.dim),
     }[state.kind];
     const narrow = this.width < 330;
     return h_flex()
       .id(`app-${report.workspace}-${i}`)
-      .h(30)
-      .px(12)
-      .gap(9)
+      .h(28)
+      .px(10)
+      .mx(4)
+      .gap(8)
       .items_center()
+      .rounded(6)
       .text_size(12.5)
       .when(app.present, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => cx.spawn(async (cx) => this.openApp(report, app, cx))))
       .when(Boolean(state.label), (el) => el.tooltip(state.label))
-      .child(h_flex().w(16).flex_none().justify_center().child(glyph))
-      .child(
-        div()
-          .flex_none()
-          .w(narrow ? 70 : 96)
-          .truncate()
-          .font_medium()
-          .text_color(app.present ? t.foreground : t.dim)
-          .child(app.name)
-      )
+      .child(h_flex().w(12).flex_none().justify_center().child(glyph))
+      .child(div().flex_1().min_w(0).truncate().text_color(app.present ? t.foreground : t.dim).child(app.name))
+      .when(state.kind === "dirty", (el) => el.child(div().flex_none().text_size(11).text_color(t.ansi3).child(state.label)))
+      .when(app.present && app.published === false, (el) => el.child(this.pill("local", t.muted, t.raised)))
+      .when(Boolean(status), (el) => el.child(this.statusMark(status, t, 11)))
       .child(
         h_flex()
-          .flex_1()
-          .min_w(0)
-          .gap(5)
+          .flex_none()
+          .max_w(narrow ? 110 : 170)
+          .gap(4)
           .items_center()
-          .text_color(state.kind === "drift" || state.kind === "detached" ? t.blocked : t.muted)
-          .when(app.present && !narrow, (el) => el.child(svg(ICON("branch")).size(11).flex_none().text_color(t.dim)))
+          .text_size(11.5)
+          .text_color(warn ? t.blocked : t.dim)
+          .when(app.present && !narrow, (el) => el.child(svg(ICON("branch")).size(10).flex_none()))
           .child(div().min_w(0).truncate().child(app.present ? (app.branch ?? "—") : "missing"))
-      )
-      .when(state.kind === "dirty", (el) => el.child(div().flex_none().text_size(11.5).text_color(t.ansi3).child(state.label)))
-      .when(app.present && app.published === false, (el) => el.child(this.pill("local", t.muted, t.raised)))
-      .when(Boolean(status), (el) => el.child(this.statusMark(status, t, 11)));
+      );
+  }
+
+  // A small heading over a run of cards; full width, so it starts its own line.
+  section(t, label, count) {
+    return h_flex()
+      .w_full()
+      .pt(6)
+      .px(2)
+      .gap(6)
+      .items_baseline()
+      .child(div().text_size(11).font_semibold().text_color(t.muted).child(label))
+      .child(div().text_size(11).text_color(t.dim).child(String(count)));
   }
 
   card(report, ctx, width) {
     const { t, ps, ags, shownSpace } = ctx;
     const group = { name: report.workspace, path: report.path };
+    const isMain = report.workspace === "main";
     const space = spaceForGroup(group, ctx.spaceList, ps);
     const here = agentsIn(report.path, ags, ps);
     const status = mostUrgent(here.map((a) => a.status));
     const fixes = problems(report);
     const shown = Boolean(space && shownSpace && space.id === shownSpace.id);
-    const kind = isTicket(report.workspace) ? "review" : null;
-    const stripe = status === "blocked" ? t.blocked : status === "working" ? t.working : fixes.length ? t.ansi3 : space ? t.accent : t.border;
+    const review = isTicket(report.workspace);
     const fixKey = `fix-${report.workspace}`;
     const apps = shownApps(report);
-    return h_flex()
+    const total = (report.apps ?? []).length;
+    const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+    const meta = [
+      isMain ? `default branch of ${plural(total, "app")}` : plural(apps.length, "app"),
+      here.length ? plural(here.length, "agent") : "",
+      shown ? "shown" : space ? "open" : "not open",
+    ].filter(Boolean).join("  ·  ");
+    // One dot for the group's state: an agent's status first, else open or not.
+    const dot = this.statusMark(status, t, 11) ?? div().size(7).mx(2).flex_none().rounded_full()
+      .when(Boolean(space), (el) => el.bg(t.accent))
+      .when(!space, (el) => el.border(1.5).border_color(t.dim));
+    return v_flex()
       .id(`card-${report.workspace}`)
       .flex_none()
       .w(width)
@@ -338,69 +357,85 @@ export default class Jade extends View {
       .border(1)
       .border_color(shown ? t.accent : t.border)
       .bg(t.surface)
-      .child(div().w(3).flex_none().h_full().bg(stripe))
       .child(
-        v_flex()
-          .flex_1()
-          .min_w(0)
+        h_flex()
+          .id(`head-${report.workspace}`)
+          // Inset and rounded to sit inside the card's corners: the card doesn't clip its hover.
+          .m(3)
+          .rounded(7)
+          .pl(9)
+          .pr(5)
+          .py(6)
+          .gap(10)
+          .items_center()
+          .cursor_pointer()
+          .hover((s) => s.bg(t.hover))
+          .on_click((_e, cx) => cx.spawn(async (cx) => this.openGroup(report, cx)))
+          .child(h_flex().w(16).flex_none().justify_center().child(dot))
           .child(
-            h_flex()
-              .id(`head-${report.workspace}`)
-              .h(40)
-              .pl(12)
-              .pr(8)
-              .gap(8)
-              .items_center()
-              .cursor_pointer()
-              .hover((s) => s.bg(t.hover))
-              .on_click((_e, cx) => cx.spawn(async (cx) => this.openGroup(report, cx)))
-              .child(div().min_w(0).truncate().text_size(14).font_semibold().text_color(t.foreground).child(report.workspace))
-              .when(Boolean(kind), (el) => el.child(this.pill(kind, kind === "review" ? t.accent : t.muted, kind === "review" ? t.accent + "22" : t.raised)))
-              .child(div().flex_1())
-              .when(Boolean(status), (el) => el.child(this.statusMark(status, t)))
-              .when(here.length > 1, (el) => el.child(div().text_size(11).text_color(t.dim).child(`${here.length} agents`)))
+            v_flex()
+              .flex_1()
+              .min_w(0)
+              .gap(1)
               .child(
-                this.button(`open-${report.workspace}`, space ? "chevron" : "open", space ? (shown ? "Shown" : "Go") : "Open", (cx) => cx.spawn(async (cx) => this.openGroup(report, cx)), {
-                  tip: space ? `Go to the ${space.name} space` : "Open as a space: a root tab and one per app",
-                })
+                h_flex()
+                  .gap(6)
+                  .items_center()
+                  .child(div().min_w(0).truncate().text_size(13.5).font_semibold().text_color(t.foreground).child(report.workspace))
+                  .when(review, (el) => el.child(this.pill("review", t.accent, t.accent + "22")))
               )
+              .child(div().truncate().text_size(11.5).text_color(t.dim).child(meta))
           )
-          .when(Boolean(report.failed), (el) => el.child(div().px(12).pb(10).text_size(12).text_color(t.blocked).child(report.failed)))
-          .when(!report.failed && report.workspace !== "main" && apps.length === 0, (el) =>
-            el.child(div().px(12).pb(8).text_size(12).text_color(t.dim).child("No apps yet: jade add <repo>, or jade create <name> for a new one."))
-          )
-          .children(apps.map((app, i) => this.appRow(report, app, i, ctx)))
-          .when(fixes.length > 0, (el) =>
+          .when(!shown, (el) =>
             el.child(
-              h_flex()
-                .mt(4)
-                .px(12)
-                .py(8)
-                .gap(8)
-                .items_center()
-                .border_t(1)
-                .border_color(t.border)
-                .bg(t.ansi3 + "12")
-                .child(svg(ICON("alert")).size(12).flex_none().text_color(t.ansi3))
-                .child(
-                  div()
-                    .flex_1()
-                    .min_w(0)
-                    .truncate()
-                    .text_size(12)
-                    .text_color(t.muted)
-                    .tooltip(fixes.map((f) => `${f.app}: ${f.message}  →  ${f.fix}`).join("\n"))
-                    .child(fixes.length === 1 ? `${fixes[0].app}: ${fixes[0].message}` : `${fixes.length} things to fix`)
-                )
-                .child(
-                  this.button(fixKey, "wrench", "Fix", (cx) => this.act(cx, fixKey, "Fixing…", ["doctor", report.workspace]), {
-                    busy: this.busy[fixKey] ?? null,
-                    tip: "jade doctor: fixes drift, detached HEADs and missing .env files",
-                  })
-                )
+              this.button(`open-${report.workspace}`, space ? "chevron" : "open", space ? "Go" : "Open", (cx) => cx.spawn(async (cx) => this.openGroup(report, cx)), {
+                tip: space ? `Go to the ${space.name} space` : "Open as a space: a root tab and one per app",
+              })
             )
           )
-          .child(div().h(4))
+      )
+      .when(Boolean(report.failed), (el) => el.child(div().px(12).pb(10).text_size(12).text_color(t.blocked).child(report.failed)))
+      .when(!report.failed && !isMain && apps.length === 0, (el) =>
+        el.child(div().px(12).py(8).border_t(1).border_color(t.border).text_size(12).text_color(t.dim).child("No apps yet: jade add <repo>, or jade create <name> for a new one."))
+      )
+      .when(apps.length > 0, (el) =>
+        el.child(
+          v_flex()
+            .pt(3)
+            .pb(4)
+            .border_t(1)
+            .border_color(t.border)
+            .children(apps.map((app, i) => this.appRow(report, app, i, ctx)))
+        )
+      )
+      .when(fixes.length > 0, (el) =>
+        el.child(
+          h_flex()
+            .px(12)
+            .py(7)
+            .gap(8)
+            .items_center()
+            .border_t(1)
+            .border_color(t.border)
+            .bg(t.ansi3 + "12")
+            .child(svg(ICON("alert")).size(12).flex_none().text_color(t.ansi3))
+            .child(
+              div()
+                .flex_1()
+                .min_w(0)
+                .truncate()
+                .text_size(12)
+                .text_color(t.muted)
+                .tooltip(fixes.map((f) => `${f.app}: ${f.message}  →  ${f.fix}`).join("\n"))
+                .child(fixes.length === 1 ? `${fixes[0].app}: ${fixes[0].message}` : `${fixes.length} things to fix`)
+            )
+            .child(
+              this.button(fixKey, "wrench", "Fix", (cx) => this.act(cx, fixKey, "Fixing…", ["doctor", report.workspace]), {
+                busy: this.busy[fixKey] ?? null,
+                tip: "jade doctor: fixes drift, detached HEADs and missing .env files",
+              })
+            )
+        )
       );
   }
 
@@ -538,6 +573,17 @@ export default class Jade extends View {
       );
   }
 
+  // main first, then feature groups and review groups, each under a small heading.
+  cards(ctx, width) {
+    const main = this.reports.filter((r) => r.workspace === "main");
+    const reviews = this.reports.filter((r) => isTicket(r.workspace));
+    const groups = this.reports.filter((r) => r.workspace !== "main" && !isTicket(r.workspace));
+    const out = main.map((r) => this.card(r, ctx, width));
+    if (groups.length) out.push(this.section(ctx.t, "Groups", groups.length), ...groups.map((r) => this.card(r, ctx, width)));
+    if (reviews.length) out.push(this.section(ctx.t, "Reviews", reviews.length), ...reviews.map((r) => this.card(r, ctx, width)));
+    return out;
+  }
+
   render(cx) {
     const t = theme();
     const ctx = { t, ps: panes(), ags: agents(), spaceList: spaces() };
@@ -567,7 +613,7 @@ export default class Jade extends View {
       .items_start()
       .content_start()
       .gap(GAP)
-      .children(this.reports.map((r) => this.card(r, ctx, cardWidth)))
+      .children(this.cards(ctx, cardWidth))
       .when(this.reports.length === 0 && !this.loading, (el) => el.child(div().p(12).text_color(t.dim).child("No groups yet.")));
     // A popup is as tall as its content (up to its height), so there the list sizes to
     // its cards; in a pane or tab it fills what the header and footer leave.

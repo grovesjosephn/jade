@@ -5,7 +5,7 @@ next to your spaces and agents, and opens them as spaces.
 
 - **One card per group:** `main`, feature groups, and review groups (ticket names like `JADE-42`, marked "review").
 - **One row per app in the group** (main lists none: its card just opens it; other groups list only the apps they have a worktree of): its branch, uncommitted changes (`+staged ~unstaged ?untracked`), drift or a detached HEAD in red, a missing worktree, and a "local" pill for apps not published yet.
-- **Live agents:** a spinner while an agent in that group or app is working, a pulsing "Needs you" when one is blocked, and a dot when one finished. A card's left stripe follows the same order, then yellow for problems, then the accent color when the group is open.
+- **Live agents:** a spinner while an agent in that group or app is working, a pulsing "Needs you" when one is blocked, and a dot when one finished. A dot by each group's name shows the same, else a filled accent dot when the group is open as a space and a hollow one when it isn't; the shown group's card has an accent border. main comes first, then feature groups under "Groups" and review groups under "Reviews".
 - **Open / Go:** opens the group as a space named after it, with a root tab (an agent there sees every app) and one tab per app. When the space already exists, it goes there. Clicking an app opens or selects that app's tab.
 - **Fix** runs `jade doctor <group>`. **Update** runs `jade update`. **New group** runs `jade workspace add <name> --all`.
 
