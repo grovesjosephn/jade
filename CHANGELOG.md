@@ -1,6 +1,6 @@
 # Changelog
 
-Notable changes to `jade`, a CLI for managing multi-repo development workspaces built on git bare repos + worktrees. No git tags/releases yet, so earlier entries are grouped by rough date; the current line reflects `packages/cli`'s `package.json` version.
+Notable changes to `jade`, a CLI for managing multi-repo development workspaces built on git bare repos + worktrees. Releases are tagged from `v0.3.0` on, and each heading is `packages/cli`'s `package.json` version; earlier entries are untagged and grouped by rough date.
 
 ## 0.3.0 — 2026-11
 
