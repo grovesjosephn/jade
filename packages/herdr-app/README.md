@@ -1,11 +1,12 @@
 # jade for herdr-app
 
 A [herdr-app](https://herdr.dev) mod that shows a jade root's groups and apps
-next to your spaces and agents, and opens them as spaces.
+next to your spaces and agents, and opens them as spaces. Version 0.2.0; see
+the [changelog](../../CHANGELOG.md).
 
-- **One card per group:** `main`, feature groups, and review groups (ticket names like `JADE-42`, marked "review").
-- **One row per app in the group** (main lists none: its card just opens it; other groups list only the apps they have a worktree of): its branch, uncommitted changes (`+staged ~unstaged ?untracked`), drift or a detached HEAD in red, a missing worktree, and a "local" pill for apps not published yet.
-- **Live agents:** a spinner while an agent in that group or app is working, a pulsing "Needs you" when one is blocked, and a dot when one finished. A dot by each group's name shows the same, else a filled accent dot when the group is open as a space and a hollow one when it isn't; the shown group's card has an accent border. main comes first, then feature groups under "Groups" and review groups under "Reviews".
+- **One card per group:** `main` first, then feature groups under "Groups" and review groups (ticket names like `JADE-42`) under "Reviews". Each card's header has the group's name over a summary line (its apps, its agents, and whether it's open as a space).
+- **Only the group's own apps:** main's card lists none, since it's just a way to open main. Other groups list only the apps they have a worktree of, each with its branch, uncommitted changes (`+staged ~unstaged ?untracked`), drift or a detached HEAD in red, and a "local" pill for apps not published yet.
+- **Live agents:** a dot by each group's name shows a spinner while an agent in it is working, a pulsing "Needs you" when one is blocked, and a dot when one finished. Otherwise the dot is filled with the accent color when the group is open as a space and hollow when it isn't. App rows show their own agents the same way, and the group you're looking at has an accent border.
 - **Open / Go:** opens the group as a space named after it, with a root tab (an agent there sees every app) and one tab per app. When the space already exists, it goes there. Clicking an app opens or selects that app's tab.
 - **Fix** runs `jade doctor <group>`. **Update** runs `jade update`. **New group** runs `jade workspace add <name> --all`.
 
@@ -26,7 +27,11 @@ herdr-app doesn't reload a symlinked mod folder when its files change.
 
 - As a popup: `herdr-app do mod.open '{"name":"jade"}'`. Bind it to a key in `~/.config/herdr-app/keys.json`, for example `"global": { "ctrl-shift-j": "mod.open:jade" }`.
 - As a tab: `herdr-app do tab.new '{"name":"jade","mod":"jade"}'`.
-- In your layout: a block with `"content": { "mod": "jade" }`.
+- In your layout: a block with `"content": { "mod": "jade" }`. To make it a side
+  panel beside Files and Changes, add that block as another child of the
+  `panel-body` stack, and show it with `layout.select {stack: "panel-body", child: "<id>"}`
+  plus `layout.show {id: "panel"}`.
+- Its jade icon uses the layout's `accent` color.
 
 Optional props: `root` (a jade root to show instead of looking for one) and
 `bin` (the jade program; default `jade` on your PATH).

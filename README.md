@@ -9,7 +9,7 @@ Clone each repo once. Work on many branches across many repos at the same time.
 ![Bun](https://img.shields.io/badge/runtime-bun-f9f1e1?logo=bun&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/lang-typescript-3178c6?logo=typescript&logoColor=white)
 ![Git](https://img.shields.io/badge/git-%E2%89%A52.5-f05032?logo=git&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.2.0-2e8b57)
+![Version](https://img.shields.io/badge/version-0.3.0-2e8b57)
 
 [Why jade?](#-why-jade) ·
 [Install](#-install) ·
@@ -140,7 +140,7 @@ A few details worth knowing:
 
 | Field | Purpose |
 |---|---|
-| `orgUrl` | Lets you `jade add <repo-name>` instead of typing full URLs. Accepts `https://`, `ssh://`, and scp-style `git@host:org`. |
+| `orgUrl` | Lets you `jade add <repo-name>` instead of typing full URLs, and is where `jade publish` creates repos. Accepts `https://`, `ssh://`, scp-style `git@host:org`, a bare GitHub owner (`acme`, read as `https://github.com/acme`), or `host/owner` (`gitlab.com/acme`, read as https). |
 | `apps` | The managed apps, in the order they were added. That order is also the tab order for `jade open`. |
 | `defaultBranch` | Optional per-app override, set by `jade add --branch`. Otherwise jade detects it from the remote. |
 
@@ -149,13 +149,19 @@ A few details worth knowing:
 Every command that operates on a workspace accepts `-w, --workspace <path>` to
 target a root other than the one jade finds from your current directory.
 
+**Output for scripts and agents.** When stdout isn't a terminal, jade prints plain
+lines instead of boxes and spinners: no escape codes, and each line starts with a
+tag (`ok`, `info`, `warn`, `error`, `done`, or `-` for a step). Errors go to stderr.
+`JADE_PLAIN=1` forces plain output and `JADE_PLAIN=0` forces the terminal look.
+Commands that would prompt stop with a hint instead when there's no terminal.
+
 ### Setup
 
 | Command | Description |
 |---|---|
 | `jade init <path> [--orgUrl <url>]` | Create a workspace root with `.bare/`, `main/`, `workspace/`, and `jade.json`. |
 | `jade add <name\|url> [--name <app>] [-b <branch>]` | Bare-clone a repo into `.bare/` and check it out in `main/`. |
-| `jade import <path> [--name <app>] [-b <branch>] [-g <group>]` | Move an existing local clone into the workspace. Its branches, tags and origin are copied into `.bare/<app>`, `main/<app>` is checked out on the default branch, and the branch you were on (with its staged, unstaged and untracked changes, and its `.env`) lands in `workspace/<group>/<app>`. The group is named after the branch unless you pass `-g`. Uncommitted work on the default branch needs `-g <name>` and goes on a new branch of that name. The original directory isn't touched; delete it once you've checked the import. |
+| `jade import <path> [--name <app>] [-b <branch>] [-g <group>]` | Move an existing local clone into the workspace. Its branches, tags and origin are copied into `.bare/<app>`, `main/<app>` is checked out on the default branch, and the branch you were on (with its staged, unstaged and untracked changes, and its `.env`) lands in `workspace/<group>/<app>`. The group is named after the branch unless you pass `-g`. Uncommitted work on the default branch needs `-g <name>` and goes on a new branch of that name. The original directory isn't touched. `--check` lists what deleting it would lose (exiting 1 if anything would be), `--remove-source` deletes it only when nothing would, and `--json` prints one JSON object for scripts. |
 | `jade create <name> [-b <branch>] [--groups a,b\|all\|none] [--remote [--public]]` | Start a brand-new repo locally: an empty bare repo in `.bare/`, `main/<name>` with one empty first commit, and a `jade.json` entry. Run it from inside a feature group and the app is added there too (or choose with `--groups`). No remote is created unless you pass `--remote`. The first commit needs a git identity (`user.name` / `user.email`). |
 | `jade publish <app> [--url <url>] [--public] [--all-branches]` | Give a local-only app a remote. It runs `gh repo create <org>/<app>` (private by default) under `orgUrl`, or uses `--url` for an existing empty repo on any host. Then it pushes the default branch with tracking and sets up fetching the way `jade add` does. Other local branches are listed so you can push them yourself, or push them all with `--all-branches`. |
 | `jade remove <app> [-f]` | Remove an app's worktrees from every group, delete its bare clone, and drop it from `jade.json`. It refuses when that would lose work: an app that was never published, commits that aren't on origin, or uncommitted changes. `-f` removes it anyway. |
@@ -168,7 +174,7 @@ target a root other than the one jade finds from your current directory.
 | `jade review <ticket> [--pick app=branch] [--no-gh] [--dry-run]` | Fetch every app, then create `workspace/<ticket>/` with only the apps that have a branch (or, via `gh`, an open PR title) matching the ticket, each checked out on its real branch. Apps with several candidates are left out until you choose one with `--pick`. |
 | `jade workspace list [--json]` | List every group and the branch each app is on. |
 | `jade workspace update [group]` | Merge each app's latest default branch into a group (the current group by default, or `main`). |
-| `jade workspace remove <name> [-d] [-f]` | Remove a group's worktrees. `-d` also deletes the branches, skipping unmerged ones unless you add `-f`. |
+| `jade workspace remove <name> [-d] [-f]` | Remove a group's worktrees. `-d` also deletes branch `<name>` in the apps that have it, skipping unmerged ones unless you add `-f`, and reports any other refusal with git's reason. Unpublished apps' unmerged branches are never force-deleted. |
 
 ### Day-to-day
 
@@ -274,20 +280,23 @@ description = "Jade: switch workspace"
 The `JADE_CWD` part passes along the focused pane's directory, so the switcher
 finds the right workspace root no matter what the plugin's own working directory is.
 
-### herdr-app mod
-
-[`packages/herdr-app`](packages/herdr-app) is a mod for [herdr-app](https://herdr.dev),
-the desktop app. It shows every group as a card with its apps' branches,
-changes and drift, plus the agents working in each one. From a card you can
-open the group as a space (a root tab plus a tab per app), run `jade doctor`
-on it, or create a new group. Install it with `packages/herdr-app/install.sh`,
-then open it with `herdr-app do mod.open '{"name":"jade"}'` or a key binding.
-See its [README](packages/herdr-app/README.md).
-
 Each plugin script is a thin wrapper around the `jade` binary on your `PATH`
 (override it with `JADE_BIN_PATH`), so none of jade's logic is duplicated in the
 plugin. The panes get their data from `jade status --json --root` and
 `jade workspace list --json`.
+
+See its [README](packages/herdr-tui/README.md).
+
+### herdr-app mod
+
+[`packages/herdr-app`](packages/herdr-app) is a mod for [herdr-app](https://herdr.dev),
+the desktop app. It shows `main` and every group as a card: each group lists
+only the apps it has a worktree of, with their branches, changes and drift, plus
+the agents working in it. From a card you can open the group as a space (a root
+tab plus a tab per app), run `jade doctor` on it, or create a new group. Install
+it with `packages/herdr-app/install.sh`, then show it as a side panel in your
+layout, a tab, or a popup (`herdr-app do mod.open '{"name":"jade"}'`).
+See its [README](packages/herdr-app/README.md).
 
 ## 🤖 Agent skills
 
@@ -312,11 +321,11 @@ contains the skills and doesn't need a `skills/` folder next to it.
 
 This repo is a Bun workspace with three packages:
 
-| Package | Description |
-|---|---|
-| [`packages/cli`](packages/cli) | The `jade` CLI (citty + @clack/prompts). |
-| [`packages/herdr-tui`](packages/herdr-tui) | The herdr-tui plugin. |
-| [`packages/herdr-app`](packages/herdr-app) | The herdr-app mod. |
+| Package | Version | Description |
+|---|---|---|
+| [`packages/cli`](packages/cli) | 0.3.0 | The `jade` CLI (citty + @clack/prompts). This README is its documentation. |
+| [`packages/herdr-tui`](packages/herdr-tui) | 0.1.0 | The herdr-tui plugin. See its [README](packages/herdr-tui/README.md). |
+| [`packages/herdr-app`](packages/herdr-app) | 0.2.0 | The herdr-app mod. See its [README](packages/herdr-app/README.md). |
 
 ```bash
 bun test                # run the test suite

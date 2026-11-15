@@ -2,7 +2,7 @@
 
 Notable changes to `jade`, a CLI for managing multi-repo development workspaces built on git bare repos + worktrees. No git tags/releases yet, so earlier entries are grouped by rough date; the current line reflects `packages/cli`'s `package.json` version.
 
-## Unreleased
+## 0.3.0 — 2026-11
 
 - `jade review <ticket>`: fetches every app, then builds `workspace/<ticket>/` with only the apps whose branch names (or, with `gh`, open PR titles) match the ticket, each checked out on its real branch with no placeholder branch. Matching is bounded, so `JADE-1` doesn't match `JADE-12`. Apps with several candidates are left out and reported until you choose with `--pick app=branch`. `--dry-run` and `--no-gh` are also available. A local branch left over from an earlier review is fast-forwarded to the PR's latest commit, and one that has diverged is left alone with a warning. This replaces the manual recipe in the `jade-review` skill.
 - `jade workspace add --from <branch>`: start new branches from a branch, tag or commit. For a branch, it uses `origin/<branch>` when the local branch is only behind, and the local branch when it has unpushed commits instead of the bare repo's HEAD. New branches don't track the start point, so `git push` doesn't target it. An unknown start point skips that app instead of quietly falling back to HEAD.
