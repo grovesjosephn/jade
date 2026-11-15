@@ -147,6 +147,12 @@ describe("buildOrgRepoUrl", () => {
     );
   });
 
+  test("reads a bare owner as GitHub and host/owner as https", () => {
+    expect(buildOrgRepoUrl("acme", "app")).toBe("https://github.com/acme/app");
+    expect(buildOrgRepoUrl("acme/", "app")).toBe("https://github.com/acme/app");
+    expect(buildOrgRepoUrl("gitlab.com/acme", "app")).toBe("https://gitlab.com/acme/app");
+  });
+
   test("tolerates a trailing slash on orgUrl", () => {
     expect(buildOrgRepoUrl("https://github.com/org/", "app")).toBe("https://github.com/org/app");
     expect(buildOrgRepoUrl("git@github.com:org/", "app")).toBe("git@github.com:org/app.git");

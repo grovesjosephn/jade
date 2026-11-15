@@ -110,6 +110,19 @@ describe("create / publish", () => {
     expect(fx.mock.getState(fx.barePath("billing"))!.originUrl).toBe("git@github.com:acme/billing.git");
   });
 
+  test("--remote with a bare-owner orgUrl creates the repo on GitHub over https", async () => {
+    fx = await createWorkspaceFixture([]);
+    await realConfigBackend.writeConfig(fx.root, {
+      ...(await realConfigBackend.readConfig(fx.root)),
+      orgUrl: "acme",
+    });
+    const gh = recordingGh();
+    await create({ name: "billing", remote: true }, gh.runGh);
+
+    expect(gh.calls).toEqual([["repo", "create", "acme/billing", "--private"]]);
+    expect(fx.mock.getState(fx.barePath("billing"))!.originUrl).toBe("https://github.com/acme/billing");
+  });
+
   test("--remote without an orgUrl keeps the local app and exits non-zero", async () => {
     fx = await createWorkspaceFixture([]);
     await expectsExit(() => create({ name: "billing", remote: true }));

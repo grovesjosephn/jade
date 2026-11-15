@@ -56,7 +56,9 @@ cd ~/work/my-workspace
 
 `--orgUrl` is optional but strongly recommended: it lets you add repos by
 short name later (`jade add frontend`) instead of typing full URLs every
-time. You can skip it and pass full URLs instead, or add it later by editing
+time. It takes a full URL (`https://…`, `ssh://…`, `git@host:org`), a bare
+GitHub owner (`myorg`, read as `https://github.com/myorg`), or `host/owner`
+(`gitlab.com/myorg`, read as https). You can skip it and pass full URLs instead, or add it later by editing
 `jade.json` directly.
 
 This creates:

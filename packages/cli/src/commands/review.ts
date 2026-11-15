@@ -9,6 +9,7 @@ import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts
 import { readGroupMeta, writeGroupMeta, type GroupMeta } from "../core/group-meta.ts";
 import { copyEnvToWorktree } from "../core/env.ts";
 import { ghRepoPrefix, runGh as defaultRunGh, type GhRunner } from "../adapters/gh.ts";
+import { normalizeOrgUrl } from "../core/repo-url.ts";
 
 /**
  * Does a branch name or PR title reference the ticket? Case-insensitive, and
@@ -169,7 +170,7 @@ export function makeReviewCommand(
       intro(`Review ${ticket}`);
 
       const jadeConfig = await config.readConfig(workspaceRoot);
-      const repoPrefix = args.gh && jadeConfig.orgUrl ? ghRepoPrefix(jadeConfig.orgUrl) : null;
+      const repoPrefix = args.gh && jadeConfig.orgUrl ? ghRepoPrefix(normalizeOrgUrl(jadeConfig.orgUrl)) : null;
       const barePath = getBarePath(workspaceRoot);
 
       // 1. Search every app. Fetch first: a bare clone's branch list is only as

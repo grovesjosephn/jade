@@ -19,6 +19,18 @@ export function isRepoUrl(input: string): boolean {
 }
 
 /**
+ * `orgUrl` as a URL. Besides full URLs, jade.json may hold a bare owner
+ * (`myorg`, meaning GitHub) or `host/owner` (`gitlab.com/myorg`); both become
+ * https URLs. Anything else is returned as written, minus trailing slashes.
+ */
+export function normalizeOrgUrl(orgUrl: string): string {
+  const trimmed = orgUrl.trim().replace(/\/+$/, "");
+  if (/^[A-Za-z0-9][\w.-]*$/.test(trimmed)) return `https://github.com/${trimmed}`;
+  if (/^[\w-]+(\.[\w-]+)+\/[^/:@\s]+$/.test(trimmed)) return `https://${trimmed}`;
+  return trimmed;
+}
+
+/**
  * Join a configured `orgUrl` with a bare repo name.
  *
  * scp-style SSH (`git@github.com:org`) needs the `.git` suffix, since without a
@@ -26,7 +38,7 @@ export function isRepoUrl(input: string): boolean {
  * `ssh://…` — resolve fine without it.
  */
 export function buildOrgRepoUrl(orgUrl: string, repoName: string): string {
-  const baseUrl = orgUrl.replace(/\/+$/, "");
+  const baseUrl = normalizeOrgUrl(orgUrl);
   return baseUrl.startsWith("git@")
     ? `${baseUrl}/${repoName}.git`
     : `${baseUrl}/${repoName}`;

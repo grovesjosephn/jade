@@ -1,7 +1,7 @@
 import { resolve } from "path";
 import { getBarePath } from "./layout.ts";
 import { getAppDefaultBranch, type JadeConfig } from "./config.ts";
-import { buildOrgRepoUrl } from "./repo-url.ts";
+import { buildOrgRepoUrl, normalizeOrgUrl } from "./repo-url.ts";
 import type { GitBackend } from "../adapters/git-backend.ts";
 import { ghRepoPrefix, type GhRunner } from "../adapters/gh.ts";
 
@@ -34,7 +34,7 @@ export async function publishApp(
 
   let url = opts.url;
   if (!url) {
-    const prefix = jadeConfig.orgUrl ? ghRepoPrefix(jadeConfig.orgUrl) : null;
+    const prefix = jadeConfig.orgUrl ? ghRepoPrefix(normalizeOrgUrl(jadeConfig.orgUrl)) : null;
     if (!jadeConfig.orgUrl || !prefix) {
       throw new Error(
         `No usable orgUrl in jade.json to create the repo under.\n` +
