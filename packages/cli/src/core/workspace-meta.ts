@@ -11,12 +11,17 @@ import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-ba
  * apps sit on their real PR branches, and unmatched apps are left out), so it
  * records the expected branch per app instead.
  */
+const WORKSPACE_KINDS = ["review", "import", "subset"] as const;
+type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
+
 export interface WorkspaceMeta {
   /**
    * review: built by `jade review` from a ticket. import: made by `jade
    * import` for a branch whose name can't be a workspace name (e.g. `feature/x`).
+   * subset: made by `jade workspace add` with only some of the hub's apps
+   * (`--apps`, or a partial pick at the prompt), so the rest are expected absent.
    */
-  kind: "review" | "import";
+  kind: WorkspaceKind;
   /** For review workspaces, the id the workspace was built from, e.g. JADE-01 */
   ticket?: string;
   /** app name -> the branch it should be on; apps not listed are expected absent */
@@ -41,7 +46,7 @@ export async function readWorkspaceMeta(
   if (raw === null) return null;
   try {
     const parsed = JSON.parse(raw);
-    if ((parsed?.kind === "review" || parsed?.kind === "import") && typeof parsed.branches === "object" && parsed.branches) {
+    if (WORKSPACE_KINDS.includes(parsed?.kind) && typeof parsed.branches === "object" && parsed.branches) {
       return parsed as WorkspaceMeta;
     }
   } catch {

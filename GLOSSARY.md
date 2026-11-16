@@ -60,9 +60,11 @@ branch. `main/` and every `workspace/<name>/` are workspaces, and the
 
 **`workspace/`.** The folder in the hub that holds every workspace except `main`.
 
-**Workspace metadata** (`.jade-group.json`, `WorkspaceMeta`). Stored in a review
-or import workspace to record what it's *supposed* to look like: its `kind`
-(`review` or `import`), the `ticket`, and the expected branch for each app.
+**Workspace metadata** (`.jade-group.json`, `WorkspaceMeta`). Stored in a review,
+import or subset workspace to record what it's *supposed* to look like: its `kind`
+(`review`, `import` or `subset`), the `ticket`, and the expected branch for each
+app. Apps it doesn't list are expected absent. `jade workspace add` writes a
+`subset` file when it creates a workspace with only some of the hub's apps.
 Without it, jade assumes the default shape: every app present, each on a branch
 named after the workspace. The file keeps its old name for compatibility.
 

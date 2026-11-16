@@ -1,5 +1,5 @@
 import { describe, test, expect, afterEach } from "bun:test";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, rm } from "fs/promises";
 import { join } from "path";
 import { doctorWorkspace, makeDoctorCommand } from "../doctor.ts";
 import { makeWorkspaceAddCommand } from "../workspace/add.ts";
@@ -16,8 +16,14 @@ describe("doctor", () => {
     if (fx) await fx.tempDir.cleanup();
   });
 
+  /**
+   * A default-shape workspace holding only `apps`, so every other app counts as
+   * missing: what a workspace made before those apps joined the hub looks like.
+   * `--apps` alone would record a subset that expects the others absent.
+   */
   async function addWorkspace(name: string, apps: string) {
     await makeWorkspaceAddCommand(fx.mock.git).run!({ args: { name, apps, hub: fx.root } } as any);
+    await rm(join(fx.root, "workspace", name, ".jade-group.json"), { force: true });
   }
 
   const run = async (workspace: string, opts: { dryRun?: boolean; addMissing?: boolean } = {}) =>
