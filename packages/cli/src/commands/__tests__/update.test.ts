@@ -17,26 +17,26 @@ describe("update command", () => {
 
   test("pulls all apps in main workspace", async () => {
     tempDir = await createTempDir();
-    const workspacePath = join(tempDir.path, "ws");
+    const hubPath = join(tempDir.path, "ws");
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
     const initCmd = makeInitCommand(fs, config);
-    await initCmd.run!({ args: { path: workspacePath } } as any);
+    await initCmd.run!({ args: { path: hubPath } } as any);
 
     const { git, calls } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
     const updateCmd = makeUpdateCommand(git, fs);
 
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/alpha", name: "alpha", workspace: workspacePath },
+      args: { repoNameOrUrl: "https://github.com/org/alpha", name: "alpha", hub: hubPath },
     } as any);
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/beta", name: "beta", workspace: workspacePath },
+      args: { repoNameOrUrl: "https://github.com/org/beta", name: "beta", hub: hubPath },
     } as any);
 
     calls.length = 0;
 
-    await updateCmd.run!({ args: { workspace: workspacePath } } as any);
+    await updateCmd.run!({ args: { hub: hubPath } } as any);
 
     // pullFF now does `git pull --prune origin <branch>`, which fetches as
     // part of the pull — no separate fetch step is issued.
@@ -47,38 +47,38 @@ describe("update command", () => {
 
   test("exits when no apps exist", async () => {
     tempDir = await createTempDir();
-    const workspacePath = join(tempDir.path, "ws");
+    const hubPath = join(tempDir.path, "ws");
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
     const initCmd = makeInitCommand(fs, config);
-    await initCmd.run!({ args: { path: workspacePath } } as any);
+    await initCmd.run!({ args: { path: hubPath } } as any);
 
     const { git } = createMockGitBackend();
     const updateCmd = makeUpdateCommand(git, fs);
 
     await expectsExit(() =>
-      updateCmd.run!({ args: { workspace: workspacePath } } as any)
+      updateCmd.run!({ args: { hub: hubPath } } as any)
     );
   });
 
   test("quiet mode shows compact summary", async () => {
     tempDir = await createTempDir();
-    const workspacePath = join(tempDir.path, "ws");
+    const hubPath = join(tempDir.path, "ws");
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
     const initCmd = makeInitCommand(fs, config);
-    await initCmd.run!({ args: { path: workspacePath } } as any);
+    await initCmd.run!({ args: { path: hubPath } } as any);
 
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
     const updateCmd = makeUpdateCommand(git, fs);
 
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/alpha", name: "alpha", workspace: workspacePath },
+      args: { repoNameOrUrl: "https://github.com/org/alpha", name: "alpha", hub: hubPath },
     } as any);
 
     const logs = await withCapturedConsole(() =>
-      updateCmd.run!({ args: { workspace: workspacePath } } as any)
+      updateCmd.run!({ args: { hub: hubPath } } as any)
     );
 
     expect(logs.some((l) => l.includes("1 updated"))).toBe(true);
@@ -87,22 +87,22 @@ describe("update command", () => {
 
   test("verbose mode shows per-app details", async () => {
     tempDir = await createTempDir();
-    const workspacePath = join(tempDir.path, "ws");
+    const hubPath = join(tempDir.path, "ws");
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
     const initCmd = makeInitCommand(fs, config);
-    await initCmd.run!({ args: { path: workspacePath } } as any);
+    await initCmd.run!({ args: { path: hubPath } } as any);
 
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
     const updateCmd = makeUpdateCommand(git, fs);
 
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/alpha", name: "alpha", workspace: workspacePath },
+      args: { repoNameOrUrl: "https://github.com/org/alpha", name: "alpha", hub: hubPath },
     } as any);
 
     const logs = await withCapturedConsole(() =>
-      updateCmd.run!({ args: { workspace: workspacePath, verbose: true } } as any)
+      updateCmd.run!({ args: { hub: hubPath, verbose: true } } as any)
     );
 
     expect(logs.some((l) => l.includes("Updating main workspace"))).toBe(true);
@@ -111,20 +111,20 @@ describe("update command", () => {
 
   test("reports failed apps without stopping", async () => {
     tempDir = await createTempDir();
-    const workspacePath = join(tempDir.path, "ws");
+    const hubPath = join(tempDir.path, "ws");
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
     const initCmd = makeInitCommand(fs, config);
-    await initCmd.run!({ args: { path: workspacePath } } as any);
+    await initCmd.run!({ args: { path: hubPath } } as any);
 
     const { git, calls } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
 
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/alpha", name: "alpha", workspace: workspacePath },
+      args: { repoNameOrUrl: "https://github.com/org/alpha", name: "alpha", hub: hubPath },
     } as any);
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/beta", name: "beta", workspace: workspacePath },
+      args: { repoNameOrUrl: "https://github.com/org/beta", name: "beta", hub: hubPath },
     } as any);
 
     const failingGit = {
@@ -138,7 +138,7 @@ describe("update command", () => {
     const updateCmd = makeUpdateCommand(failingGit, fs);
 
     const logs = await withCapturedConsole(() =>
-      updateCmd.run!({ args: { workspace: workspacePath } } as any)
+      updateCmd.run!({ args: { hub: hubPath } } as any)
     );
 
     expect(logs.some((l) => l.includes("1 updated"))).toBe(true);

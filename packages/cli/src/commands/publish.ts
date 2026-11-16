@@ -1,12 +1,12 @@
 import { defineCommand } from "citty";
-import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "../adapters/ui.ts";
-import { findWorkspaceRoot, listBareRepos } from "../core/layout.ts";
+import { listBareRepos } from "../core/layout.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
 import { runGh as defaultRunGh, type GhRunner } from "../adapters/gh.ts";
 import { publishApp } from "../core/publish.ts";
+import { hubArgs, resolveHub } from "../core/hub.ts";
 
 export function makePublishCommand(
   git: GitBackend = realGitBackend,
@@ -39,24 +39,18 @@ export function makePublishCommand(
         description: "Push every local branch, not just the default branch",
         default: false,
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
-      },
+      ...hubArgs,
     },
     async run({ args }) {
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
       const appName = args.name as string;
-      if (!(await listBareRepos(workspaceRoot, fs)).includes(appName)) {
+      if (!(await listBareRepos(hub, fs)).includes(appName)) {
         cancel(`App '${appName}' not found in .bare/`);
         process.exit(1);
       }
@@ -65,7 +59,7 @@ export function makePublishCommand(
       const s = spinner();
       s.start(`Creating remote and pushing`);
       try {
-        const result = await publishApp(workspaceRoot, appName, await config.readConfig(workspaceRoot), git, runGh, {
+        const result = await publishApp(hub, appName, await config.readConfig(hub), git, runGh, {
           url: args.url as string | undefined,
           visibility: args.public ? "public" : "private",
           allBranches: args.allBranches as boolean,

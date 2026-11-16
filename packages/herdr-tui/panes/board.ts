@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { select, text, isCancel, intro, outro, cancel, log, spinner } from "@clack/prompts";
 import { resolveContextCwd, jadeBin } from "../lib/context.ts";
+import { workspacesOf } from "../lib/jade-json.ts";
 
 interface WorkspaceApp {
   name: string;
   branch: string;
 }
 
-interface WorkspaceGroup {
+interface JadeWorkspace {
   name: string;
   apps: WorkspaceApp[];
 }
@@ -34,8 +35,8 @@ async function waitToClose(message: string): Promise<void> {
   await text({ message: "Press Enter to close this pane" });
 }
 
-/** Compact per-group hint: app count plus a few branch names, never a wall of text. */
-function groupHint(g: WorkspaceGroup): string {
+/** Compact per-workspace hint: app count plus a few branch names, never a wall of text. */
+function workspaceHint(g: JadeWorkspace): string {
   if (g.apps.length === 0) return "empty";
   const shown = g.apps.slice(0, 3).map((a) => `${a.name}@${a.branch}`);
   const rest = g.apps.length - shown.length;
@@ -47,7 +48,7 @@ async function main() {
 
   intro("Jade board");
 
-  // `jade workspace list` runs a git call per app per group, so on big
+  // `jade workspace list` runs a git call per app per workspace, so on big
   // workspaces it takes a few seconds. Show feedback so the pane isn't blank.
   const s = spinner();
   s.start(`Loading workspaces from ${cwd}`);
@@ -61,23 +62,23 @@ async function main() {
     process.exit(1);
   }
 
-  let groups: WorkspaceGroup[];
+  let workspaces: JadeWorkspace[];
   try {
-    ({ groups } = JSON.parse(listResult.stdout) as { groups: WorkspaceGroup[] });
+    workspaces = workspacesOf<JadeWorkspace>(JSON.parse(listResult.stdout));
   } catch {
     s.error("Could not read workspaces");
     await waitToClose(`Could not parse 'jade workspace list --json' output from ${cwd}.`);
     process.exit(1);
   }
-  s.stop(`${groups.length} workspace${groups.length === 1 ? "" : "s"}`);
+  s.stop(`${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}`);
 
   const choice = await select({
-    message: "Open a workspace group, or create a new one",
+    message: "Open a workspace, or create a new one",
     options: [
-      ...groups.map((g) => ({
+      ...workspaces.map((g) => ({
         value: g.name,
         label: g.name,
-        hint: groupHint(g),
+        hint: workspaceHint(g),
       })),
       { value: NEW_WORKSPACE, label: "+ New feature workspace" },
     ],
@@ -88,25 +89,25 @@ async function main() {
     process.exit(0);
   }
 
-  let group = choice as string;
+  let workspace = choice as string;
 
-  if (group === NEW_WORKSPACE) {
+  if (workspace === NEW_WORKSPACE) {
     const name = await text({ message: "Workspace name" });
     if (isCancel(name) || !name) {
       cancel("Cancelled");
       process.exit(0);
     }
-    group = name as string;
+    workspace = name as string;
 
-    const createStatus = jadeInherited(["workspace", "add", group, "-a"], cwd);
+    const createStatus = jadeInherited(["workspace", "add", workspace, "-a"], cwd);
     if (createStatus !== 0) {
-      await waitToClose(`Failed to create workspace '${group}' (exit ${createStatus}).`);
+      await waitToClose(`Failed to create workspace '${workspace}' (exit ${createStatus}).`);
       process.exit(createStatus);
     }
   }
 
-  outro(`Opening '${group}'`);
-  process.exit(jadeInherited(["open", group], cwd));
+  outro(`Opening '${workspace}'`);
+  process.exit(jadeInherited(["open", workspace], cwd));
 }
 
 main();

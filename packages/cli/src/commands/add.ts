@@ -1,12 +1,13 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "../adapters/ui.ts";
-import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath } from "../core/layout.ts";
+import { getBarePath, getWorkspacePath } from "../core/layout.ts";
 import { addAppToConfig } from "../core/config.ts";
 import { buildOrgRepoUrl, deriveAppName, isRepoUrl } from "../core/repo-url.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
+import { hubArgs, resolveHub } from "../core/hub.ts";
 
 export function makeAddCommand(
   git: GitBackend = realGitBackend,
@@ -33,25 +34,19 @@ export function makeAddCommand(
         alias: "b",
         description: "Default branch for the main workspace (auto-detected if not specified)",
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path (defaults to current directory)",
-      },
+      ...hubArgs,
     },
     async run({ args }) {
       intro(`Adding repository to workspace`);
 
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
-      const jadeConfig = await config.readConfig(workspaceRoot);
+      const jadeConfig = await config.readConfig(hub);
       const input = args.repoNameOrUrl as string;
 
       let url: string;
@@ -83,7 +78,7 @@ export function makeAddCommand(
         log.info(`Using orgUrl from config: ${jadeConfig.orgUrl}`);
       }
 
-      const barePath = getBarePath(workspaceRoot);
+      const barePath = getBarePath(hub);
       const bareRepoPath = resolve(barePath, appName);
 
       if (await fs.pathExists(bareRepoPath)) {
@@ -116,12 +111,12 @@ export function makeAddCommand(
         const worktreeSpinner = spinner();
         worktreeSpinner.start(`Setting up main workspace`);
 
-        const mainGroupPath = getWorktreeGroupPath(workspaceRoot, "main");
-        const mainWorktreePath = resolve(mainGroupPath, appName);
+        const mainWorkspacePath = getWorkspacePath(hub, "main");
+        const mainWorktreePath = resolve(mainWorkspacePath, appName);
 
         if (!await fs.pathExists(mainWorktreePath)) {
-          if (!await fs.pathExists(mainGroupPath)) {
-            await fs.mkdirp(mainGroupPath);
+          if (!await fs.pathExists(mainWorkspacePath)) {
+            await fs.mkdirp(mainWorkspacePath);
           }
 
           const branchToUse = defaultBranch || detectedBranch;
@@ -131,7 +126,7 @@ export function makeAddCommand(
 
         worktreeSpinner.stop(`Main workspace ready`);
 
-        await addAppToConfig(config, workspaceRoot, appName, defaultBranch);
+        await addAppToConfig(config, hub, appName, defaultBranch);
         log.success(`Updated jade.json config`);
 
         outro(`Successfully added ${appName}!`);

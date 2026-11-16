@@ -12,12 +12,12 @@ export function makeInitCommand(
   return defineCommand({
     meta: {
       name: "init",
-      description: "Initialize a new workspace",
+      description: "Initialize a new hub",
     },
     args: {
       path: {
         type: "positional",
-        description: "Workspace directory path",
+        description: "Hub directory path",
         required: true,
       },
       orgUrl: {
@@ -26,19 +26,19 @@ export function makeInitCommand(
       },
     },
     async run({ args }) {
-      const workspaceRoot = resolve(args.path as string);
-      const barePath = getBarePath(workspaceRoot);
-      const mainPath = getMainWorktreePath(workspaceRoot);
-      const worktreeContainerPath = getWorktreeContainerPath(workspaceRoot);
+      const hub = resolve(args.path as string);
+      const barePath = getBarePath(hub);
+      const mainPath = getMainWorktreePath(hub);
+      const worktreeContainerPath = getWorktreeContainerPath(hub);
 
-      intro(`Initializing workspace at: ${workspaceRoot}`);
+      intro(`Initializing hub at: ${hub}`);
 
-      if (!await fs.pathExists(workspaceRoot)) {
-        await fs.mkdirp(workspaceRoot);
-        log.success(`Created workspace directory`);
+      if (!await fs.pathExists(hub)) {
+        await fs.mkdirp(hub);
+        log.success(`Created hub directory`);
       } else {
         if (await fs.pathExists(barePath)) {
-          cancel(`Workspace already initialized at ${workspaceRoot}`);
+          cancel(`Hub already initialized at ${hub}`);
           process.exit(1);
         }
       }
@@ -52,7 +52,7 @@ export function makeInitCommand(
       await fs.mkdirp(worktreeContainerPath);
       log.success(`Created workspace/ directory`);
 
-      await config.writeConfig(workspaceRoot, {
+      await config.writeConfig(hub, {
         version: "1.0",
         apps: [],
         orgUrl: args.orgUrl as string | undefined,

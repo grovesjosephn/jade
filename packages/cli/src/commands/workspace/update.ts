@@ -2,10 +2,9 @@ import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "../../adapters/ui.ts";
 import {
-  findWorkspaceRoot,
   getBarePath,
-  getCurrentGroup,
-  getWorktreeGroupPath,
+  getCurrentWorkspace,
+  getWorkspacePath,
   listBareRepos,
   listWorktreeDirs,
 } from "../../core/layout.ts";
@@ -13,6 +12,7 @@ import { type GitBackend, realGitBackend } from "../../adapters/git-backend.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs-backend.ts";
 import { getAppDefaultBranch } from "../../core/config.ts";
 import { type ConfigBackend, realConfigBackend } from "../../core/config-backend.ts";
+import { hubArgs, resolveHub } from "../../core/hub.ts";
 
 export function makeWorkspaceUpdateCommand(
   git: GitBackend = realGitBackend,
@@ -22,47 +22,41 @@ export function makeWorkspaceUpdateCommand(
   return defineCommand({
     meta: {
       name: "update",
-      description: "Merge each app's latest default-branch changes into a workspace group",
+      description: "Merge each app's latest default-branch changes into a workspace",
     },
     args: {
       group: {
         type: "positional",
-        description: "Worktree group to update (defaults to current group, or 'main')",
+        description: "Workspace to update (defaults to current workspace, or 'main')",
         required: false,
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
-      },
+      ...hubArgs,
     },
     async run({ args }) {
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
-      const groups = await listWorktreeDirs(workspaceRoot, fs);
-      const group =
+      const workspaces = await listWorktreeDirs(hub, fs);
+      const workspace =
         (args.group as string | undefined) ||
-        getCurrentGroup(workspaceRoot, process.cwd()) ||
+        getCurrentWorkspace(hub, process.cwd()) ||
         "main";
 
-      if (!groups.includes(group)) {
-        cancel(`Worktree group '${group}' not found. See 'jade workspace list'.`);
+      if (!workspaces.includes(workspace)) {
+        cancel(`Workspace '${workspace}' not found. See 'jade workspace list'.`);
         process.exit(1);
       }
 
-      const groupPath = getWorktreeGroupPath(workspaceRoot, group);
-      const barePath = getBarePath(workspaceRoot);
-      const bareRepos = await listBareRepos(workspaceRoot, fs);
-      const jadeConfig = await config.readConfig(workspaceRoot);
+      const workspacePath = getWorkspacePath(hub, workspace);
+      const barePath = getBarePath(hub);
+      const bareRepos = await listBareRepos(hub, fs);
+      const jadeConfig = await config.readConfig(hub);
 
-      intro(`Updating workspace '${group}'`);
+      intro(`Updating workspace '${workspace}'`);
 
       const merged: string[] = [];
       const upToDate: string[] = [];
@@ -71,7 +65,7 @@ export function makeWorkspaceUpdateCommand(
       const s = spinner();
 
       for (const appName of bareRepos) {
-        const appWorktreePath = resolve(groupPath, appName);
+        const appWorktreePath = resolve(workspacePath, appName);
         if (!await fs.pathExists(appWorktreePath)) continue;
 
         s.start(`Updating ${appName}`);
@@ -104,7 +98,7 @@ export function makeWorkspaceUpdateCommand(
       }
 
       if (merged.length === 0 && upToDate.length === 0 && failed.length === 0 && localOnly.length === 0) {
-        log.warn(`No apps found in '${group}'.`);
+        log.warn(`No apps found in '${workspace}'.`);
       } else {
         if (merged.length > 0) log.success(`Merged: ${merged.join(", ")}`);
         if (upToDate.length > 0) log.info(`Already up to date: ${upToDate.join(", ")}`);

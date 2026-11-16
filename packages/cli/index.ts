@@ -21,7 +21,7 @@ const main = defineCommand({
   meta: {
     name: "jade",
     version: "0.2.0",
-    description: "Workspace manager for multi-app development",
+    description: "Multi-repo hubs of git worktrees: one bare clone per app, a workspace per branch",
   },
   subCommands: {
     init,

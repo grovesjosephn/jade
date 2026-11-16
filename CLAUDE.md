@@ -1,20 +1,22 @@
 # jade
 
-A Bun/TypeScript CLI for multi-repo workspaces built on git bare repos and worktrees. The CLI is `packages/cli`; `packages/herdr-tui` is the herdr-tui terminal plugin, and `packages/herdr-app/mods/jade` is a herdr-app mod (install with `packages/herdr-app/install.sh`, check with `herdr-app check`) (herdr-tui is the `herdr` multiplexer; herdr-core, driven by the `hc` CLI, is the separate terminal runtime; call it herdr-core in code and docs, `hc` only for the command itself).
+A Bun/TypeScript CLI for multi-repo hubs built on git bare repos and worktrees. The CLI is `packages/cli`; `packages/herdr-tui` is the herdr-tui terminal plugin, and `packages/herdr-app/mods/jade` is a herdr-app mod (install with `packages/herdr-app/install.sh`, check with `herdr-app check`) (herdr-tui is the `herdr` multiplexer; herdr-core, driven by the `hc` CLI, is the separate terminal runtime; call it herdr-core in code and docs, `hc` only for the command itself).
 
 ## Glossary
 
-The word "workspace" is overloaded in older code and docs. In this codebase:
+The full glossary is [GLOSSARY.md](GLOSSARY.md). The terms that matter most:
 
-- **Root**: the directory holding `.bare/` and `jade.json`. Functions call it `workspaceRoot`.
+- **Hub**: the directory holding `.bare/` and `jade.json`. Code calls it `hub` (`findHub`, `resolveHub`); the flag is `--hub <path>`.
 - **App**: one repository. It has a bare clone at `.bare/<app>` and an entry in `jade.json`.
-- **Group**: a directory with one worktree per app. `main/` is the group on each app's default branch; every other group is `workspace/<name>/`, usually on branch `<name>`. The `jade workspace …` commands manage groups.
+- **Workspace**: a directory with one worktree per app. `main/` is the workspace on each app's default branch; every other workspace is `workspace/<name>/`, usually on branch `<name>`. Code calls it `workspace` (`ResolvedWorkspace`, `getWorkspacePath`), and the `jade workspace …` commands manage them. Before 0.4 this was a "group" and the hub was the "root" or "workspace root".
 - **Published**: the app has an `origin` remote. Apps made with `jade create` aren't published until `jade publish`.
+
+Old names that stay on purpose, for compatibility: the `-g/--group` and `--groups` flags, the `.jade-group.json` file, the `JADE_GROUP`/`JADE_ROOT` env vars (set beside `JADE_WORKSPACE`/`JADE_HUB`), the `root`/`groups`/`group` JSON keys (printed beside `hub`/`workspaces`/`workspace`), and the deprecated `-w/--workspace` (for `--hub`) and `status --root` (for `--summary`). Don't add new uses of the old names.
 
 ## Where things go (`packages/cli/src`)
 
 - `commands/`: one file per CLI command, and the path matches the invocation (`commands/workspace/add.ts` is `jade workspace add`). A command with subcommands is a folder whose `index.ts` registers them. Every command is also registered in `packages/cli/index.ts`.
-- `core/`: jade's own concepts: the directory layout (`layout.ts`), config, groups and their metadata, health checks, `.env` handling. No prompts and no `process.exit`.
+- `core/`: jade's own concepts: the directory layout (`layout.ts`), finding the hub (`hub.ts`, including the shared `hubArgs`), config, workspaces and their metadata (`workspace.ts`, `workspace-meta.ts`), health checks, `.env` handling. No prompts and no `process.exit`.
 - `adapters/`: wrappers around external programs and the filesystem (git, gh, fs, herdr-tui, herdr-core, tmux). Commands receive these through injectable backends so tests can pass in fakes from `test/`.
 - Output: commands take `intro`, `outro`, `cancel`, `log` and `spinner` from `adapters/ui.ts`, never from `@clack/prompts` directly. It renders clack in a terminal and plain tagged lines otherwise (`JADE_PLAIN=1|0` forces either), and a command with `--json` calls `setJsonMode(asJson)` at the start of `run` so only its JSON reaches stdout. Interactive prompts still come from clack, behind `canPrompt()`, and need a flag-based way around them.
 - `bundled-skills/`: the skills `jade skills install` ships. The skill text itself lives in `packages/cli/skills/`.

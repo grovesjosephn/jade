@@ -1,15 +1,16 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "../adapters/ui.ts";
-import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath } from "../core/layout.ts";
-import { resolveGroup } from "../core/group.ts";
+import { getBarePath, getWorkspacePath } from "../core/layout.ts";
+import { resolveWorkspace } from "../core/workspace.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
-import { readGroupMeta, writeGroupMeta, type GroupMeta } from "../core/group-meta.ts";
+import { readWorkspaceMeta, writeWorkspaceMeta, type WorkspaceMeta } from "../core/workspace-meta.ts";
 import { copyEnvToWorktree } from "../core/env.ts";
 import { ghRepoPrefix, runGh as defaultRunGh, type GhRunner } from "../adapters/gh.ts";
 import { normalizeOrgUrl } from "../core/repo-url.ts";
+import { hubArgs, resolveHub } from "../core/hub.ts";
 
 /**
  * Does a branch name or PR title reference the ticket? Case-insensitive, and
@@ -115,19 +116,13 @@ export function makeReviewCommand(
         description: "Report matches without creating anything",
         default: false,
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
-      },
+      ...hubArgs,
     },
     async run({ args }) {
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
@@ -138,11 +133,11 @@ export function makeReviewCommand(
       }
 
       const dryRun = args.dryRun as boolean;
-      const groupPath = getWorktreeGroupPath(workspaceRoot, ticket);
-      const group = await resolveGroup(workspaceRoot, ticket, fs);
-      const existingMeta = group.exists ? await readGroupMeta(groupPath, fs) : null;
+      const workspacePath = getWorkspacePath(hub, ticket);
+      const workspace = await resolveWorkspace(hub, ticket, fs);
+      const existingMeta = workspace.exists ? await readWorkspaceMeta(workspacePath, fs) : null;
 
-      if (group.exists && !existingMeta) {
+      if (workspace.exists && !existingMeta) {
         cancel(
           `workspace/${ticket}/ already exists and wasn't created by 'jade review'. ` +
             `Remove it first or pick another name.`
@@ -150,7 +145,7 @@ export function makeReviewCommand(
         process.exit(1);
       }
 
-      const knownApps = group.apps.map((a) => a.name);
+      const knownApps = workspace.apps.map((a) => a.name);
       let searchApps = knownApps;
       if (args.apps !== undefined) {
         const requested = (args.apps as string).split(",").map((a) => a.trim()).filter(Boolean);
@@ -169,9 +164,9 @@ export function makeReviewCommand(
 
       intro(`Review ${ticket}`);
 
-      const jadeConfig = await config.readConfig(workspaceRoot);
+      const jadeConfig = await config.readConfig(hub);
       const repoPrefix = args.gh && jadeConfig.orgUrl ? ghRepoPrefix(normalizeOrgUrl(jadeConfig.orgUrl)) : null;
-      const barePath = getBarePath(workspaceRoot);
+      const barePath = getBarePath(hub);
 
       // 1. Search every app. Fetch first: a bare clone's branch list is only as
       //    fresh as its last fetch, and PR branches are usually recent pushes.
@@ -245,7 +240,7 @@ export function makeReviewCommand(
       }
 
       // Apps already in a previous run of this review stay as they are.
-      const toCreate = matched.filter((m) => !group.apps.find((a) => a.name === m.app)?.present);
+      const toCreate = matched.filter((m) => !workspace.apps.find((a) => a.name === m.app)?.present);
       const alreadyPresent = matched.filter((m) => !toCreate.includes(m));
 
       if (dryRun) {
@@ -258,8 +253,8 @@ export function makeReviewCommand(
       }
 
       // 2. Create worktrees directly on the matched branches — no placeholder.
-      await fs.mkdirp(groupPath);
-      const meta: GroupMeta = existingMeta ?? { kind: "review", ticket, branches: {} };
+      await fs.mkdirp(workspacePath);
+      const meta: WorkspaceMeta = existingMeta ?? { kind: "review", ticket, branches: {} };
       const created: string[] = [];
       const failed: string[] = [];
 
@@ -268,7 +263,7 @@ export function makeReviewCommand(
       for (const m of toCreate) {
         const branch = m.branches[0]!;
         try {
-          const actual = await git.worktreeAdd(resolve(barePath, m.app), resolve(groupPath, m.app), branch);
+          const actual = await git.worktreeAdd(resolve(barePath, m.app), resolve(workspacePath, m.app), branch);
           meta.branches[m.app] = actual ?? branch;
           if (actual && actual !== branch) {
             log.warn(
@@ -277,14 +272,14 @@ export function makeReviewCommand(
           } else {
             // A local branch left from an earlier review (or the user's own
             // checkout) isn't moved by fetch; bring it up to the PR's latest.
-            const ff = await git.fastForwardToOrigin(resolve(groupPath, m.app), branch);
+            const ff = await git.fastForwardToOrigin(resolve(workspacePath, m.app), branch);
             if (ff === "updated") log.info(`${m.app}: fast-forwarded ${branch} to origin/${branch}`);
             if (ff === "diverged") {
               log.warn(`${m.app}: local '${branch}' has diverged from origin/${branch}; left as is`);
             }
           }
           created.push(m.app);
-          await copyEnvToWorktree(workspaceRoot, m.app, resolve(groupPath, m.app), fs);
+          await copyEnvToWorktree(hub, m.app, resolve(workspacePath, m.app), fs);
         } catch (error) {
           log.warn(`${m.app}: could not create worktree on '${branch}': ${error}`);
           failed.push(m.app);
@@ -293,9 +288,9 @@ export function makeReviewCommand(
       s2.stop(`Done`);
 
       if (Object.keys(meta.branches).length > 0) {
-        await writeGroupMeta(groupPath, meta, fs);
-      } else if (!group.exists) {
-        await fs.remove(groupPath);
+        await writeWorkspaceMeta(workspacePath, meta, fs);
+      } else if (!workspace.exists) {
+        await fs.remove(workspacePath);
       }
 
       // 3. Report.

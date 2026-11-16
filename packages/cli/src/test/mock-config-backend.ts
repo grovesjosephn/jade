@@ -8,7 +8,7 @@ const DEFAULT_CONFIG: JadeConfig = {
 
 /**
  * Mock ConfigBackend that simulates jade.json reads/writes with in-memory state,
- * keyed by workspace root, instead of touching real disk.
+ * keyed by hub, instead of touching real disk.
  *
  * Usage in tests:
  *
@@ -19,10 +19,10 @@ const DEFAULT_CONFIG: JadeConfig = {
  */
 export interface MockConfigBackend {
   config: ConfigBackend;
-  /** Get in-memory config for a workspace root (returns undefined if never read/written) */
-  getState(workspaceRoot: string): JadeConfig | undefined;
-  /** Pre-seed config for a workspace root (useful for tests that expect an existing jade.json) */
-  seedState(workspaceRoot: string, config: Partial<JadeConfig>): void;
+  /** Get in-memory config for a hub (returns undefined if never read/written) */
+  getState(hub: string): JadeConfig | undefined;
+  /** Pre-seed config for a hub (useful for tests that expect an existing jade.json) */
+  seedState(hub: string, config: Partial<JadeConfig>): void;
   /** Calls recorded on the backend (for assertion purposes) */
   calls: { method: string; args: unknown[] }[];
 }
@@ -37,12 +37,12 @@ export function createMockConfigBackend(): MockConfigBackend {
 
   const config: ConfigBackend = {
     /**
-     * Return the in-memory config for this workspace root, or the same
+     * Return the in-memory config for this hub, or the same
      * defaults readConfig() falls back to when no jade.json exists yet.
      */
-    async readConfig(workspaceRoot: string): Promise<JadeConfig> {
-      record("readConfig", workspaceRoot);
-      const existing = states.get(workspaceRoot);
+    async readConfig(hub: string): Promise<JadeConfig> {
+      record("readConfig", hub);
+      const existing = states.get(hub);
       return existing ? { ...existing } : { ...DEFAULT_CONFIG };
     },
 
@@ -50,18 +50,18 @@ export function createMockConfigBackend(): MockConfigBackend {
      * Merge the patch into the existing (or default) config and store it,
      * matching core/config.ts's writeConfig merge semantics exactly.
      */
-    async writeConfig(workspaceRoot: string, patch: Partial<JadeConfig>): Promise<void> {
-      record("writeConfig", workspaceRoot, patch);
-      const existing = states.get(workspaceRoot) ?? { ...DEFAULT_CONFIG };
-      states.set(workspaceRoot, { ...existing, ...patch });
+    async writeConfig(hub: string, patch: Partial<JadeConfig>): Promise<void> {
+      record("writeConfig", hub, patch);
+      const existing = states.get(hub) ?? { ...DEFAULT_CONFIG };
+      states.set(hub, { ...existing, ...patch });
     },
   };
 
   return {
     config,
-    getState: (workspaceRoot) => states.get(workspaceRoot),
-    seedState(workspaceRoot, overrides = {}) {
-      states.set(workspaceRoot, { ...DEFAULT_CONFIG, ...overrides });
+    getState: (hub) => states.get(hub),
+    seedState(hub, overrides = {}) {
+      states.set(hub, { ...DEFAULT_CONFIG, ...overrides });
     },
     calls,
   };

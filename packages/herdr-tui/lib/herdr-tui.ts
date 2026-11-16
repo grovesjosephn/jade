@@ -17,8 +17,8 @@ export interface OpenWorkspace {
 
 /**
  * Parse `herdr workspace list` JSON into workspaces keyed by label. `jade open`
- * labels every workspace with its group name, so the label is what we match a
- * jade group against. Pure and defensive: malformed or unexpected output yields
+ * labels every herdr-tui workspace with its jade workspace name, so the label is what we match a
+ * jade workspace against. Pure and defensive: malformed or unexpected output yields
  * an empty map rather than throwing, so the caller degrades to "nothing open".
  */
 export function parseOpenWorkspaces(stdout: string): Map<string, OpenWorkspace> {

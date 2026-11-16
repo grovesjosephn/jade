@@ -15,18 +15,18 @@ export interface PublishOptions {
 
 /**
  * Give a local-only app (from `jade create`) a remote: create the repository
- * with `gh repo create` under the workspace's orgUrl (or use `--url`), then
+ * with `gh repo create` under the hub's orgUrl (or use `--url`), then
  * push and wire up tracking. Throws with a user-facing message on failure.
  */
 export async function publishApp(
-  workspaceRoot: string,
+  hub: string,
   appName: string,
   jadeConfig: JadeConfig,
   git: GitBackend,
   runGh: GhRunner,
   opts: PublishOptions
 ): Promise<{ url: string; pushed: string[]; unpushed: string[] }> {
-  const bareRepoPath = resolve(getBarePath(workspaceRoot), appName);
+  const bareRepoPath = resolve(getBarePath(hub), appName);
 
   if (await git.hasOrigin(bareRepoPath)) {
     throw new Error(`'${appName}' already has an origin remote; nothing to publish`);

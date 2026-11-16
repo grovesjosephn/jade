@@ -1,11 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { select, isCancel, intro, outro, cancel, log, text } from "@clack/prompts";
 import { resolveContextCwd, jadeBin } from "../lib/context.ts";
+import { workspacesOf } from "../lib/jade-json.ts";
 import { listOpenWorkspaces, focusWorkspace, type OpenWorkspace } from "../lib/herdr-tui.ts";
 
-function jadeCaptured(args: string[], cwd: string): { stdout: string; status: number } {
-  const result = spawnSync(jadeBin(), args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
-  return { stdout: result.stdout ?? "", status: result.status ?? 1 };
+// stderr is captured, not shown: jade 0.4 warns there that `--root` is deprecated,
+// and that warning shouldn't land in the overlay. It's shown only if jade fails.
+function jadeCaptured(args: string[], cwd: string): { stdout: string; stderr: string; status: number } {
+  const result = spawnSync(jadeBin(), args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", status: result.status ?? 1 };
 }
 
 function jadeInherited(args: string[], cwd: string): number {
@@ -24,7 +27,7 @@ async function waitToClose(message: string): Promise<void> {
 }
 
 // Sort so the most likely quick-switch targets come first: other open
-// workspaces, then not-yet-opened groups, then the one you're already in.
+// workspaces, then not-yet-opened workspaces, then the one you're already in.
 const RANK = { open: 0, closed: 1, current: 2 } as const;
 
 function classify(name: string, open: Map<string, OpenWorkspace>) {
@@ -41,33 +44,35 @@ async function main() {
 
   // `--root` is load-bearing: bare `jade status` is contextual, and our cwd is the
   // focused pane's — normally inside a workspace — so without it we'd get that
-  // workspace's detail payload (per-app git calls) instead of the group list.
-  // The root view is just a directory scan, which keeps this quick-switch overlay snappy.
+  // workspace's detail payload (per-app git calls) instead of the workspace list.
+  // `--root` (not 0.4's `--summary`) so an older jade on PATH answers too. The hub
+  // view is just a directory scan, which keeps this quick-switch overlay snappy.
   const statusResult = jadeCaptured(["status", "--json", "--root"], cwd);
   if (statusResult.status !== 0) {
     await waitToClose(
-      `Not a jade workspace here (${cwd}).\nRun 'jade init', or summon this from inside a jade-managed workspace.`
+      `Not in a jade hub here (${cwd}).\nRun 'jade init', or summon this from inside a jade hub.` +
+        (statusResult.stderr.trim() ? `\n\n${statusResult.stderr.trim()}` : "")
     );
     process.exit(1);
   }
 
-  let groups: string[];
+  let workspaces: string[];
   try {
-    ({ groups } = JSON.parse(statusResult.stdout) as { groups: string[] });
+    workspaces = workspacesOf<string>(JSON.parse(statusResult.stdout));
   } catch {
-    await waitToClose(`Could not parse 'jade status --json --all' output from ${cwd}.`);
+    await waitToClose(`Could not parse 'jade status --json --root' output from ${cwd}.`);
     process.exit(1);
   }
 
-  if (!groups || groups.length === 0) {
+  if (workspaces.length === 0) {
     await waitToClose(`No workspaces yet in ${cwd}.\nCreate one with 'jade workspace add <name>'.`);
     process.exit(1);
   }
 
-  // Which groups are already open in this herdr-tui session (matched by workspace label).
+  // Which workspaces are already open in this herdr-tui session (matched by workspace label).
   const open = listOpenWorkspaces();
 
-  const options = groups
+  const options = workspaces
     .map((name) => ({ name, ...classify(name, open) }))
     .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
     .map(({ name, hint }) => ({ value: name, label: name, hint }));
@@ -79,25 +84,25 @@ async function main() {
     process.exit(0);
   }
 
-  const group = choice as string;
-  const ws = open.get(group);
+  const name = choice as string;
+  const ws = open.get(name);
 
   // Already open: focus it directly through herdr-tui — instant, no jade spin-up.
   // Fall back to a full `jade open` if focusing fails (e.g. a stale id).
   if (ws) {
     if (ws.focused) {
-      outro(`Already in '${group}'`);
+      outro(`Already in '${name}'`);
       process.exit(0);
     }
-    outro(`Switching to '${group}'`);
+    outro(`Switching to '${name}'`);
     const status = focusWorkspace(ws.workspaceId);
     if (status === 0) process.exit(0);
-    log.warn(`Could not focus '${group}' directly; reopening via jade.`);
+    log.warn(`Could not focus '${name}' directly; reopening via jade.`);
   }
 
   // Not open (or focus failed): open the full workspace as tabs.
-  outro(`Opening '${group}'`);
-  process.exit(jadeInherited(["open", group], cwd));
+  outro(`Opening '${name}'`);
+  process.exit(jadeInherited(["open", name], cwd));
 }
 
 main();

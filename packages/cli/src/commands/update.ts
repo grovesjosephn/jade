@@ -1,9 +1,10 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "../adapters/ui.ts";
-import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, listBareRepos } from "../core/layout.ts";
+import { getBarePath, getWorkspacePath, listBareRepos } from "../core/layout.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
+import { hubArgs, resolveHub } from "../core/hub.ts";
 
 export function makeUpdateCommand(
   git: GitBackend = realGitBackend,
@@ -21,26 +22,20 @@ export function makeUpdateCommand(
         description: "Show per-app fetch/pull details",
         default: false,
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
-      },
+      ...hubArgs,
     },
     async run({ args }) {
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
       const verbose = args.verbose as boolean;
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
-      const bareRepos = await listBareRepos(workspaceRoot, fs);
-      const barePath = getBarePath(workspaceRoot);
-      const mainPath = getWorktreeGroupPath(workspaceRoot, "main");
+      const bareRepos = await listBareRepos(hub, fs);
+      const barePath = getBarePath(hub);
+      const mainPath = getWorkspacePath(hub, "main");
 
       if (bareRepos.length === 0) {
         cancel(`No apps found. Add apps with 'jade add <repo-url>'`);

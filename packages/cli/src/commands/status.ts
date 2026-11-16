@@ -1,37 +1,44 @@
 import { defineCommand } from "citty";
-import { resolve } from "path";
-import { findWorkspaceRoot, getCurrentGroup, listWorktreeDirs } from "../core/layout.ts";
-import { resolveGroup, type ResolvedGroup } from "../core/group.ts";
-import { readGroupMeta } from "../core/group-meta.ts";
+import { getCurrentWorkspace, listWorktreeDirs } from "../core/layout.ts";
+import { resolveWorkspace, type ResolvedWorkspace } from "../core/workspace.ts";
+import { readWorkspaceMeta } from "../core/workspace-meta.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
 import { buildAttention, collectApps, type AppReport, type Attention } from "../core/health.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
-import { defaultRunHerdrTui, findWorkspaceByLabel, type HerdrTuiRunner } from "../adapters/herdr-tui.ts";
+import { defaultRunHerdrTui, findTuiWorkspaceByLabel, type HerdrTuiRunner } from "../adapters/herdr-tui.ts";
 import pkg from "../../package.json" with { type: "json" };
+import { hubArgs, resolveHub } from "../core/hub.ts";
 
-export type StatusTarget = { view: "root" } | { view: "workspace"; name: string };
+export type StatusTarget = { view: "hub" } | { view: "workspace"; name: string };
 
 /**
- * Decide whether `jade status` reports the whole root or a single workspace.
+ * Decide whether `jade status` reports the whole hub or a single workspace.
  *
  * Kept pure and exported so the contextual rules are testable without chdir'ing
- * the test process. An explicit name always wins — including over --root — so
+ * the test process. An explicit name always wins — including over --summary — so
  * `jade status <name>` means the same thing wherever you run it.
  */
 export function resolveStatusTarget(opts: {
-  workspaceRoot: string;
+  hub: string;
   explicitName?: string;
-  forceRoot: boolean;
+  summary: boolean;
   cwd: string;
 }): StatusTarget {
   if (opts.explicitName) return { view: "workspace", name: opts.explicitName };
-  if (opts.forceRoot) return { view: "root" };
+  if (opts.summary) return { view: "hub" };
 
-  const current = getCurrentGroup(opts.workspaceRoot, opts.cwd);
+  const current = getCurrentWorkspace(opts.hub, opts.cwd);
   if (current) return { view: "workspace", name: current };
 
-  return { view: "root" };
+  return { view: "hub" };
+}
+
+/** The deprecated --root flag: still means --summary, with a warning on stderr. */
+function rootFlag(value: unknown): boolean {
+  if (!value) return false;
+  process.stderr.write("warn --root is deprecated and will be removed; use --summary\n");
+  return true;
 }
 
 interface HerdrTuiReport {
@@ -50,28 +57,29 @@ class WorkspaceNotFoundError extends Error {
   }
 }
 
-function printStatus(workspaceRoot: string, orgUrl: string | undefined, groups: string[]): void {
+function printStatus(hub: string, orgUrl: string | undefined, workspaces: string[]): void {
   const lines: string[] = [
     `version: ${pkg.version}`,
-    `root: ${workspaceRoot}`,
+    `hub: ${hub}`,
   ];
   if (orgUrl) {
     lines.push(`org: ${orgUrl}`);
   }
   lines.push("workspaces:");
-  if (groups.length === 0) {
+  if (workspaces.length === 0) {
     lines.push("  (none)");
   } else {
-    for (const name of groups) {
+    for (const name of workspaces) {
       lines.push(`  - ${name}`);
     }
   }
   console.log(lines.join("\n"));
 }
 
-function printStatusJson(workspaceRoot: string, orgUrl: string | undefined, groups: string[]): void {
+function printStatusJson(hub: string, orgUrl: string | undefined, workspaces: string[]): void {
   console.log(
-    JSON.stringify({ view: "root", version: pkg.version, root: workspaceRoot, orgUrl, groups })
+    // `root` and `groups` are the pre-0.4 names, kept so older readers keep working.
+    JSON.stringify({ view: "hub", version: pkg.version, hub, root: hub, orgUrl, workspaces, groups: workspaces })
   );
 }
 
@@ -81,8 +89,8 @@ function printStatusJson(workspaceRoot: string, orgUrl: string | undefined, grou
  * gaps, missing apps, herdr-tui, the actionable `attention` list) stays available
  * via --json rather than crowding the interactive view.
  */
-function printWorkspaceStatus(group: ResolvedGroup, apps: AppReport[]): void {
-  const lines: string[] = [`workspace: ${group.name}`];
+function printWorkspaceStatus(workspace: ResolvedWorkspace, apps: AppReport[]): void {
+  const lines: string[] = [`workspace: ${workspace.name}`];
   const installed = apps.filter((app) => app.present);
 
   if (installed.length === 0) {
@@ -111,9 +119,9 @@ function printWorkspaceStatus(group: ResolvedGroup, apps: AppReport[]): void {
 }
 
 function printWorkspaceStatusJson(
-  workspaceRoot: string,
+  hub: string,
   orgUrl: string | undefined,
-  group: ResolvedGroup,
+  workspace: ResolvedWorkspace,
   apps: AppReport[],
   herdr: HerdrTuiReport | null,
   attention: Attention[]
@@ -122,11 +130,12 @@ function printWorkspaceStatusJson(
     JSON.stringify({
       view: "workspace",
       version: pkg.version,
-      root: workspaceRoot,
+      hub,
+      root: hub,
       orgUrl,
-      workspace: group.name,
-      path: group.path,
-      isMain: group.isMain,
+      workspace: workspace.name,
+      path: workspace.path,
+      isMain: workspace.isMain,
       ...(herdr ? { herdr } : {}),
       apps,
       attention,
@@ -135,17 +144,17 @@ function printWorkspaceStatusJson(
 }
 
 /**
- * Query herdr-tui for whether this group is open in the current session. Best
+ * Query herdr-tui for whether this workspace is open in the current session. Best
  * effort by design: status must never fail because herdr-tui is unreachable.
  */
 async function collectHerdrTui(
-  groupName: string,
+  workspaceName: string,
   runHerdrTui: HerdrTuiRunner
 ): Promise<HerdrTuiReport | null> {
   if (process.env.HERDR_ENV !== "1") return null;
 
   try {
-    const found = findWorkspaceByLabel(await runHerdrTui(["workspace", "list"]), groupName);
+    const found = findTuiWorkspaceByLabel(await runHerdrTui(["workspace", "list"]), workspaceName);
     if (!found) return { open: false, focused: false, workspaceId: null };
     return { open: true, focused: found.focused, workspaceId: found.workspaceId };
   } catch {
@@ -163,7 +172,7 @@ export function makeStatusCommand(
     meta: {
       name: "status",
       description:
-        "Show workspace status. Inside a workspace, reports that workspace's apps, branches and gaps; at the workspace root, lists jade version, root, org URL and workspaces",
+        "Show status. Inside a workspace, reports that workspace's apps, branches and gaps; elsewhere in the hub, lists jade version, the hub, org URL and workspaces",
     },
     args: {
       name: {
@@ -171,14 +180,15 @@ export function makeStatusCommand(
         description: "Workspace to report on (defaults to the current workspace, if any)",
         required: false,
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
+      ...hubArgs,
+      summary: {
+        type: "boolean",
+        description: "Show the hub summary even when run from inside a workspace",
+        default: false,
       },
       root: {
         type: "boolean",
-        description: "Force the root summary even when run from inside a workspace",
+        description: "Deprecated: use --summary",
         default: false,
       },
       json: {
@@ -188,59 +198,57 @@ export function makeStatusCommand(
       },
     },
     async run({ args }) {
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        console.error("jade status: not in a jade workspace (no .bare/). Run `jade init` first.");
+      if (!hub) {
+        console.error("jade status: not in a jade hub (no .bare/). Run `jade init` first.");
         process.exit(1);
       }
 
       try {
-        const jadeConfig = await config.readConfig(workspaceRoot);
+        const jadeConfig = await config.readConfig(hub);
         const target = resolveStatusTarget({
-          workspaceRoot,
+          hub,
           explicitName: args.name as string | undefined,
-          forceRoot: args.root as boolean,
+          summary: Boolean(args.summary) || rootFlag(args.root),
           cwd: process.cwd(),
         });
 
-        if (target.view === "root") {
-          const groups = await listWorktreeDirs(workspaceRoot, fs);
+        if (target.view === "hub") {
+          const workspaces = await listWorktreeDirs(hub, fs);
           if (args.json) {
-            printStatusJson(workspaceRoot, jadeConfig.orgUrl, groups);
+            printStatusJson(hub, jadeConfig.orgUrl, workspaces);
           } else {
-            printStatus(workspaceRoot, jadeConfig.orgUrl, groups);
+            printStatus(hub, jadeConfig.orgUrl, workspaces);
           }
           return;
         }
 
-        const group = await resolveGroup(workspaceRoot, target.name, fs);
+        const workspace = await resolveWorkspace(hub, target.name, fs);
 
-        if (!group.exists) {
-          throw new WorkspaceNotFoundError(target.name, await listWorktreeDirs(workspaceRoot, fs));
+        if (!workspace.exists) {
+          throw new WorkspaceNotFoundError(target.name, await listWorktreeDirs(hub, fs));
         }
 
         const asJson = args.json as boolean;
-        const meta = await readGroupMeta(group.path, fs);
-        const apps = await collectApps(workspaceRoot, group, git, fs, jadeConfig, meta, asJson);
+        const meta = await readWorkspaceMeta(workspace.path, fs);
+        const apps = await collectApps(hub, workspace, git, fs, jadeConfig, meta, asJson);
 
         if (!asJson) {
-          printWorkspaceStatus(group, apps);
+          printWorkspaceStatus(workspace, apps);
           return;
         }
 
         // Only the JSON view carries the full picture, so only it pays for the
         // extra gathering — including the herdr-tui subprocess.
-        const herdr = await collectHerdrTui(group.name, runHerdrTui);
+        const herdr = await collectHerdrTui(workspace.name, runHerdrTui);
         printWorkspaceStatusJson(
-          workspaceRoot,
+          hub,
           jadeConfig.orgUrl,
-          group,
+          workspace,
           apps,
           herdr,
-          buildAttention(group, apps)
+          buildAttention(workspace, apps)
         );
       } catch (error) {
         if (error instanceof WorkspaceNotFoundError) {

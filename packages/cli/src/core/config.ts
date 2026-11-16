@@ -35,10 +35,10 @@ const DEFAULT_CONFIG: JadeConfig = {
 };
 
 /**
- * Read jade.json config from workspace root
+ * Read jade.json config from hub
  */
-export async function readConfig(workspaceRoot: string): Promise<JadeConfig> {
-  const configPath = getConfigPath(workspaceRoot);
+export async function readConfig(hub: string): Promise<JadeConfig> {
+  const configPath = getConfigPath(hub);
 
   if (!await Bun.file(configPath).exists()) {
     return { ...DEFAULT_CONFIG };
@@ -50,14 +50,14 @@ export async function readConfig(workspaceRoot: string): Promise<JadeConfig> {
 }
 
 /**
- * Write jade.json config to workspace root
+ * Write jade.json config to hub
  */
 export async function writeConfig(
-  workspaceRoot: string,
+  hub: string,
   config: Partial<JadeConfig>
 ): Promise<void> {
-  const configPath = getConfigPath(workspaceRoot);
-  const existingConfig = await readConfig(workspaceRoot);
+  const configPath = getConfigPath(hub);
+  const existingConfig = await readConfig(hub);
   const newConfig = { ...existingConfig, ...config };
 
   await Bun.write(configPath, JSON.stringify(newConfig, null, 2) + "\n");
@@ -68,16 +68,16 @@ export async function writeConfig(
  */
 export async function addAppToConfig(
   config: ConfigBackend,
-  workspaceRoot: string,
+  hub: string,
   appName: string,
   defaultBranch?: string
 ): Promise<void> {
-  const jadeConfig = await config.readConfig(workspaceRoot);
+  const jadeConfig = await config.readConfig(hub);
   const names = getAppNames(jadeConfig);
   if (!names.includes(appName)) {
     const entry: AppItem = defaultBranch ? { name: appName, defaultBranch } : appName;
     jadeConfig.apps.push(entry);
-    await config.writeConfig(workspaceRoot, jadeConfig);
+    await config.writeConfig(hub, jadeConfig);
   }
 }
 
@@ -86,10 +86,10 @@ export async function addAppToConfig(
  */
 export async function removeAppFromConfig(
   config: ConfigBackend,
-  workspaceRoot: string,
+  hub: string,
   appName: string
 ): Promise<void> {
-  const jadeConfig = await config.readConfig(workspaceRoot);
+  const jadeConfig = await config.readConfig(hub);
   jadeConfig.apps = jadeConfig.apps.filter((app) => getAppName(app) !== appName);
-  await config.writeConfig(workspaceRoot, jadeConfig);
+  await config.writeConfig(hub, jadeConfig);
 }

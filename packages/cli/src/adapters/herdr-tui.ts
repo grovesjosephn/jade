@@ -22,17 +22,17 @@ export interface HerdrTuiWorkspace {
 
 /**
  * Find a herdr-tui workspace by its label in `workspace list` JSON. `jade open`
- * labels every herdr-tui workspace with its jade group name, so the label is the
+ * labels every herdr-tui workspace with its jade workspace name, so the label is the
  * only join key between the two systems.
  *
  * Defensive by design: malformed or unexpected output yields null rather than
  * throwing, so callers degrade to "not open" instead of failing.
  */
-export function findWorkspaceByLabel(listOutput: string, label: string): HerdrTuiWorkspace | null {
+export function findTuiWorkspaceByLabel(listOutput: string, label: string): HerdrTuiWorkspace | null {
   try {
     const parsed = JSON.parse(listOutput);
-    const workspaces = parsed?.result?.workspaces ?? [];
-    const match = workspaces.find((w: { label?: string }) => w.label === label);
+    const tuiWorkspaces = parsed?.result?.workspaces ?? [];
+    const match = tuiWorkspaces.find((w: { label?: string }) => w.label === label);
     const workspaceId = match?.workspace_id;
     if (typeof workspaceId !== "string") return null;
     return { workspaceId, focused: Boolean(match.focused) };

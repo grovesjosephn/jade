@@ -24,7 +24,7 @@ describe("createMockConfigBackend", () => {
     });
   });
 
-  test("state is isolated per workspace root", async () => {
+  test("state is isolated per hub", async () => {
     const { config } = createMockConfigBackend();
     await config.writeConfig("/ws-a", { apps: ["a"] });
     await config.writeConfig("/ws-b", { apps: ["b"] });
@@ -39,7 +39,7 @@ describe("createMockConfigBackend", () => {
     expect(getState("/ws")).toEqual({ version: "1.0", apps: ["frontend"] });
   });
 
-  test("seedState pre-populates config for a workspace root", async () => {
+  test("seedState pre-populates config for a hub", async () => {
     const { config, seedState } = createMockConfigBackend();
     seedState("/ws", { apps: ["preexisting"], orgUrl: "https://github.com/org" });
     expect(await config.readConfig("/ws")).toEqual({

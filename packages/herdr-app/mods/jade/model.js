@@ -15,11 +15,11 @@ export function mostUrgent(statuses) {
 /** `~/x` for paths under home. */
 export const tilde = (path, home) => (home && inside(path, home) ? `~${path.slice(home.replace(/\/+$/, "").length)}` : path);
 
-/** A review group's name: a ticket id like JADE-42. */
+/** A review workspace's name: a ticket id like JADE-42. */
 export const isTicket = (name) => /^[A-Z][A-Z0-9]+-\d+$/.test(name);
 
-/** main first, then feature groups by name, then review groups. */
-export function orderGroups(names) {
+/** main first, then feature workspaces by name, then review workspaces. */
+export function orderWorkspaces(names) {
   return [...names].sort((a, b) => (b === "main") - (a === "main") || isTicket(a) - isTicket(b) || a.localeCompare(b));
 }
 
@@ -30,15 +30,15 @@ export function placeOf(space, paneList) {
 }
 
 /**
- * The Herdr space showing a group: one named after it whose terminals are in
+ * The Herdr space showing a workspace: one named after it whose terminals are in
  * it, else any whose first terminal is in it. Local spaces only: jade runs here.
  */
-export function spaceForGroup(group, spaceList, paneList) {
+export function spaceForWorkspace(workspace, spaceList, paneList) {
   const local = spaceList.filter((s) => !s.machine);
   const at = (s) => placeOf(s, paneList);
   return (
-    local.find((s) => s.named && s.name === group.name && inside(at(s), group.path)) ??
-    local.find((s) => inside(at(s), group.path)) ??
+    local.find((s) => s.named && s.name === workspace.name && inside(at(s), workspace.path)) ??
+    local.find((s) => inside(at(s), workspace.path)) ??
     null
   );
 }
@@ -51,7 +51,7 @@ export function agentsIn(dir, agentList, paneList) {
 
 /** One app row: what to draw, from its status entry. */
 export function appState(app) {
-  if (!app.present) return { kind: "missing", label: "not in this group" };
+  if (!app.present) return { kind: "missing", label: "not in this workspace" };
   if (app.error) return { kind: "error", label: app.error };
   if (app.detached) return { kind: "detached", label: "detached HEAD" };
   if (app.drift) return { kind: "drift", label: `expected ${app.expectedBranch}` };
@@ -78,11 +78,22 @@ export function changes(tree) {
 export const problems = (report) => (report?.attention ?? []).filter((a) => a.kind !== "unpublished");
 
 /**
- * The app rows a group's card lists. main lists none: its card is just a way
- * to open it. Other groups list only the apps they hold a worktree of, not
- * every app in the root.
+ * The app rows a workspace's card lists. main lists none: its card is just a way
+ * to open it. Other workspaces list only the apps they hold a worktree of, not
+ * every app in the hub.
  */
 export const shownApps = (report) => (report.workspace === "main" ? [] : (report.apps ?? []).filter((a) => a.present));
+
+/**
+ * The hub summary from `jade status --root --json`, from jade 0.4 (view "hub",
+ * hub, workspaces) or earlier (view "root", root, groups). null when it isn't one.
+ */
+export function readHubView(view) {
+  if (!view || (view.view !== "hub" && view.view !== "root")) return null;
+  const hub = view.hub ?? view.root;
+  if (!hub) return null;
+  return { hub, workspaces: view.workspaces ?? view.groups ?? [], version: view.version ?? "", orgUrl: view.orgUrl ?? null };
+}
 
 /** Totals for the header line. */
 export function summary(reports) {
@@ -96,8 +107,8 @@ export function summary(reports) {
     }
     if (problems(r).length) needs++;
   }
-  return { apps: apps.size, groups: reports.length, dirty, needs };
+  return { apps: apps.size, workspaces: reports.length, dirty, needs };
 }
 
-/** A group name `jade workspace add` will take (the same rule as branch-safe folder names). */
-export const validGroupName = (name) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && !name.includes("..") && name !== "main";
+/** A workspace name `jade workspace add` will take (the same rule as branch-safe folder names). */
+export const validWorkspaceName = (name) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && !name.includes("..") && name !== "main";

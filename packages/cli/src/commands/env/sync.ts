@@ -1,9 +1,9 @@
 import { defineCommand } from "citty";
-import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "../../adapters/ui.ts";
-import { findWorkspaceRoot, listBareRepos, listWorktreeDirs } from "../../core/layout.ts";
-import { getEnvDirPath, syncEnvToGroup } from "../../core/env.ts";
+import { listBareRepos, listWorktreeDirs } from "../../core/layout.ts";
+import { getEnvDirPath, syncEnvToWorkspace } from "../../core/env.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs-backend.ts";
+import { hubArgs, resolveHub } from "../../core/hub.ts";
 
 export function makeEnvSyncCommand(fs: FileSystemBackend = realFileSystemBackend) {
   return defineCommand({
@@ -12,35 +12,29 @@ export function makeEnvSyncCommand(fs: FileSystemBackend = realFileSystemBackend
       description: "Copy .env files from .env/<app>/.env to all worktrees",
     },
     args: {
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
-      },
+      ...hubArgs,
     },
     async run({ args }) {
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
       intro(`Syncing env files`);
 
-      const envDir = getEnvDirPath(workspaceRoot);
+      const envDir = getEnvDirPath(hub);
       const envDirExists = await fs.pathExists(envDir);
       if (!envDirExists) {
         cancel(`No .env/ directory found at ${envDir}`);
         process.exit(1);
       }
 
-      const groups = await listWorktreeDirs(workspaceRoot, fs);
-      const apps = await listBareRepos(workspaceRoot, fs);
+      const workspaces = await listWorktreeDirs(hub, fs);
+      const apps = await listBareRepos(hub, fs);
 
-      if (groups.length === 0 || apps.length === 0) {
+      if (workspaces.length === 0 || apps.length === 0) {
         log.warn(`No worktrees found to sync.`);
         outro(`Done`);
         return;
@@ -52,8 +46,8 @@ export function makeEnvSyncCommand(fs: FileSystemBackend = realFileSystemBackend
       const allCopied: string[] = [];
       const allSkipped = new Set<string>();
 
-      for (const group of groups) {
-        const result = await syncEnvToGroup(workspaceRoot, group, apps, fs);
+      for (const workspace of workspaces) {
+        const result = await syncEnvToWorkspace(hub, workspace, apps, fs);
         allCopied.push(...result.copied);
         result.skipped.forEach((a) => allSkipped.add(a));
       }

@@ -1,6 +1,23 @@
 # Changelog
 
-Notable changes to `jade`, a CLI for managing multi-repo development workspaces built on git bare repos + worktrees. Releases are tagged from `v0.3.0` on, and each heading is `packages/cli`'s `package.json` version; earlier entries are untagged and grouped by rough date.
+Notable changes to `jade`, a CLI for managing multi-repo development hubs built on git bare repos + worktrees. Releases are tagged from `v0.3.0` on, and each heading is `packages/cli`'s `package.json` version; earlier entries are untagged and grouped by rough date.
+
+## Unreleased
+
+### Renamed: root → hub, group → workspace
+
+jade's two levels now have one name each. The folder with `.bare/` and `jade.json` is the **hub** (it was the "root" or "workspace root"), and a folder of app worktrees, `main/` or `workspace/<name>/`, is a **workspace** (it was a "group"). Messages, help, docs, skills and the herdr-app and herdr-tui packages all use the new words. See [GLOSSARY.md](GLOSSARY.md).
+
+What changes for you, and what keeps working:
+
+- `--hub <path>` picks the hub on every command. `-w, --workspace <path>` still works but prints a deprecation warning on stderr. It will be removed in a later release, after which `--workspace` can name a workspace.
+- `jade status --summary` forces the hub summary. `--root` still works, with a deprecation warning. (`--hub` couldn't be reused here, because it's the path flag.)
+- **`jade status --json` reports the hub view as `view: "hub"`** instead of `"root"`. Scripts that check for `"root"` need to accept `"hub"` too. This is the one change that can't keep the old value alongside the new one. The herdr-app mod and herdr-tui plugin in this release accept both, so update them along with the CLI (`packages/herdr-app/install.sh` for the mod).
+- `--json` output prints the new keys beside the old ones, so existing readers keep working: `hub` beside `root` (`status`, `doctor`), `workspaces` beside `groups` (`status`, `workspace list`, `doctor`), and `workspace` beside `group` (`doctor` entries, `import`). Read the new keys; the old ones will go with the deprecated flags.
+- `jade exec` sets `JADE_WORKSPACE` and `JADE_HUB` as well as `JADE_GROUP` and `JADE_ROOT`.
+- Plain `jade status` at the hub prints `hub:` instead of `root:`.
+- Unchanged: the `-g/--group` and `--groups` flags (their values are workspaces), the `.jade-group.json` file (so older versions still read it), the herdr-tui plugin's action id `open-group`, and the herdr-app mod's saved `jade.root` setting and `root` prop (`hub` is also accepted).
+- Internal: `workspaceRoot`/`findWorkspaceRoot` became `hub`/`findHub`, every group identifier became workspace (`ResolvedWorkspace`, `getWorkspacePath`, `core/workspace.ts`, `core/workspace-meta.ts`), and commands share one `--hub` definition and resolver (`core/hub.ts`).
 
 ## 0.3.0 — 2026-11
 

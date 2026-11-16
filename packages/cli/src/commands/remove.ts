@@ -1,11 +1,12 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "../adapters/ui.ts";
-import { findWorkspaceRoot, getBarePath, listWorktreeDirs, listBareRepos } from "../core/layout.ts";
+import { getBarePath, listWorktreeDirs, listBareRepos } from "../core/layout.ts";
 import { removeAppFromConfig } from "../core/config.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 import { type ConfigBackend, realConfigBackend } from "../core/config-backend.ts";
+import { hubArgs, resolveHub } from "../core/hub.ts";
 
 /**
  * What would be lost by deleting an app's bare repo and worktrees: no remote
@@ -53,29 +54,23 @@ export function makeRemoveCommand(
         description: "Remove even if it holds work that exists nowhere else",
         default: false,
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path (defaults to current directory)",
-      },
+      ...hubArgs,
     },
     async run({ args }) {
       intro(`Removing repository from workspace`);
 
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
       const appName = args.name as string;
-      const barePath = getBarePath(workspaceRoot);
+      const barePath = getBarePath(hub);
       const bareRepoPath = resolve(barePath, appName);
 
-      const bareRepos = await listBareRepos(workspaceRoot, fs);
+      const bareRepos = await listBareRepos(hub, fs);
       if (!bareRepos.includes(appName)) {
         const hint = bareRepos.length > 0
           ? `\nAvailable apps: ${bareRepos.join(", ")}`
@@ -115,7 +110,7 @@ export function makeRemoveCommand(
         await git.removeBareRepo(bareRepoPath);
         s.stop(`Removed bare repository from .bare/${appName}`);
 
-        await removeAppFromConfig(config, workspaceRoot, appName);
+        await removeAppFromConfig(config, hub, appName);
         log.success(`Updated jade.json config`);
 
         outro(`Successfully removed ${appName}!`);
