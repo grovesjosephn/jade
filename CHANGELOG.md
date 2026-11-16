@@ -19,6 +19,10 @@ What changes for you, and what keeps working:
 - Unchanged: the `-g/--group` and `--groups` flags (their values are workspaces), the `.jade-group.json` file (so older versions still read it), the herdr-tui plugin's action id `open-group`, and the herdr-app mod's saved `jade.root` setting and `root` prop (`hub` is also accepted).
 - Internal: `workspaceRoot`/`findWorkspaceRoot` became `hub`/`findHub`, every group identifier became workspace (`ResolvedWorkspace`, `getWorkspacePath`, `core/workspace.ts`, `core/workspace-meta.ts`), and commands share one `--hub` definition and resolver (`core/hub.ts`).
 
+### Fixed
+
+- `jade import` keeps a placeholder push URL such as `no_push` (set to block pushes) as written. A relative remote URL is only made absolute when it names something on disk; before, the placeholder became a path into the source repo.
+
 ## 0.3.0 — 2026-11
 
 - `jade review <ticket>`: fetches every app, then builds `workspace/<ticket>/` with only the apps whose branch names (or, with `gh`, open PR titles) match the ticket, each checked out on its real branch with no placeholder branch. Matching is bounded, so `JADE-1` doesn't match `JADE-12`. Apps with several candidates are left out and reported until you choose with `--pick app=branch`. `--dry-run` and `--no-gh` are also available. A local branch left over from an earlier review is fast-forwarded to the PR's latest commit, and one that has diverged is left alone with a warning. This replaces the manual recipe in the `jade-review` skill.
