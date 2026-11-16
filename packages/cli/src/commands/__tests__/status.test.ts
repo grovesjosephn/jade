@@ -1,6 +1,6 @@
 import { describe, test, expect, afterEach, spyOn } from "bun:test";
 import { join } from "path";
-import { mkdir } from "fs/promises";
+import { mkdir, rm } from "fs/promises";
 import { makeStatusCommand, resolveStatusTarget } from "../status.ts";
 import { makeAddCommand } from "../add.ts";
 import { makeWorkspaceAddCommand, type SelectAppsFn } from "../workspace/add.ts";
@@ -368,12 +368,27 @@ describe("status command — workspace view", () => {
     expect(mock.calls.map((c) => c.method)).toContain("status");
   });
 
+  test("a workspace made with only some apps doesn't report the others missing", async () => {
+    const { hubPath, mock } = await setup({
+      apps: ["app1", "app2"],
+      workspace: "feat-x",
+      workspaceApps: ["app1"],
+    });
+
+    const json = JSON.parse((await runStatus(hubPath, "feat-x", mock, { json: true })).join(""));
+    expect(json.apps.find((a: { name: string }) => a.name === "app2").expectedBranch).toBeNull();
+    expect(json.attention).toEqual([]);
+  });
+
   test("omits an app with no worktree from text but keeps it in --json", async () => {
     const { hubPath, mock } = await setup({
       apps: ["app1", "app2"],
       workspace: "feat-x",
       workspaceApps: ["app1"],
     });
+    // Back to the default shape (as if app2 joined the hub after the workspace was made),
+    // so app2 is expected and missing.
+    await rm(join(hubPath, "workspace", "feat-x", ".jade-group.json"), { force: true });
 
     const out = (await runStatus(hubPath, "feat-x", mock)).join("\n");
     expect(out).toContain("app1");

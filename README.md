@@ -173,7 +173,7 @@ Commands that would prompt stop with a hint instead when there's no terminal.
 
 | Command | Description |
 |---|---|
-| `jade workspace add <name>` | Create `workspace/<name>/` with each chosen app on branch `<name>`. Choose apps with `-a/--all`, `--apps a,b`, or the interactive picker. Re-running it on an existing workspace adds the apps that are missing. `--from <branch>` starts new branches from that branch, tag or commit. For a branch, it uses whichever of the local branch and `origin/<branch>` is further ahead, so unpushed commits aren't dropped instead of the repo's HEAD. |
+| `jade workspace add <name>` | Create `workspace/<name>/` with each chosen app on branch `<name>`. Choose apps with `-a/--all`, `--apps a,b`, or the interactive picker. Re-running it on an existing workspace adds the apps that are missing. A workspace created with only some of the apps records which ones (in `.jade-group.json`), so `status` and `doctor` don't report the rest as missing. `--from <branch>` starts new branches from that branch, tag or commit. For a branch, it uses whichever of the local branch and `origin/<branch>` is further ahead, so unpushed commits aren't dropped instead of the repo's HEAD. |
 | `jade review <ticket> [--pick app=branch] [--no-gh] [--dry-run]` | Fetch every app, then create `workspace/<ticket>/` with only the apps that have a branch (or, via `gh`, an open PR title) matching the ticket, each checked out on its real branch. Apps with several candidates are left out until you choose one with `--pick`. |
 | `jade workspace list [--json]` | List every workspace and the branch each app is on. |
 | `jade workspace update [workspace]` | Merge each app's latest default branch into a workspace (the current one by default, or `main`). |
@@ -194,7 +194,9 @@ Commands that would prompt stop with a hint instead when there's no terminal.
 
 > **Adding a new app to an existing workspace:** `jade add` only checks the
 > app out in `main/`. To pull it into a workspace, run
-> `jade workspace add <workspace> --apps <app>`.
+> `jade workspace add <workspace> --apps <app>`. A workspace made with only
+> some apps (`--apps`, or a partial pick) doesn't expect apps you add to the hub
+> later; add them the same way if you want them there.
 
 ### Checking on a workspace
 

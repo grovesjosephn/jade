@@ -2,6 +2,10 @@
 
 Notable changes to `jade`, a CLI for managing multi-repo development hubs built on git bare repos + worktrees. Releases are tagged from `v0.3.0` on, and each heading is `packages/cli`'s `package.json` version; earlier entries are untagged and grouped by rough date.
 
+## Unreleased
+
+- `jade workspace add` with only some of the hub's apps (`--apps`, or a partial pick at the prompt) now records them in `.jade-group.json` (`kind: "subset"`). `jade status` and `jade doctor` no longer report the other apps as missing, and `jade doctor --add-missing` no longer creates worktrees for them. Apps added to the workspace later are added to the list. Workspaces with every app, and ones created before this change, keep the default shape.
+
 ## 0.4.0 — 2026-11
 
 Packages: CLI 0.4.0, herdr-app mod 0.3.0, herdr-tui plugin 0.2.0.

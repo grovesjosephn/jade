@@ -16,6 +16,7 @@ import { createMockConfigBackend } from "../../test/mock-config-backend.ts";
 import { makeInitCommand } from "../init.ts";
 import { createHubFixture } from "../../test/hub-fixture.ts";
 import { realFileSystemBackend } from "../../adapters/fs-backend.ts";
+import { expectedBranch, readWorkspaceMeta } from "../../core/workspace-meta.ts";
 
 /** Stub that auto-selects all provided apps — mirrors `-a` behavior for tests. */
 const selectAll: SelectAppsFn = async (apps) => apps;
@@ -620,5 +621,67 @@ describe("workspace add --from", () => {
       } as any)
     );
     expect(await realFileSystemBackend.pathExists(join(fx.root, "workspace", "feat"))).toBe(false);
+  });
+});
+
+describe("workspace add records which apps belong in the workspace", () => {
+  let fx: Awaited<ReturnType<typeof createHubFixture>>;
+
+  afterEach(async () => {
+    if (fx) await fx.tempDir.cleanup();
+  });
+
+  const workspacePath = (name: string) => join(fx.root, "workspace", name);
+  const add = (args: Record<string, unknown>, select: SelectAppsFn = selectNone) =>
+    makeWorkspaceAddCommand(fx.mock.git, select).run!({ args: { hub: fx.root, ...args } } as any);
+
+  test("--apps with some of the apps writes subset metadata listing them", async () => {
+    fx = await createHubFixture(["api", "web", "docs"]);
+    await add({ name: "feat", apps: "api" });
+
+    const meta = await readWorkspaceMeta(workspacePath("feat"));
+    expect(meta).toEqual({ kind: "subset", branches: { api: "feat" } });
+    expect(expectedBranch("feat", "api", meta)).toBe("feat");
+    expect(expectedBranch("feat", "web", meta)).toBeNull();
+  });
+
+  test("a partial pick at the prompt writes subset metadata too", async () => {
+    fx = await createHubFixture(["api", "web"]);
+    await add({ name: "feat" }, selectOnly("web"));
+
+    expect(await readWorkspaceMeta(workspacePath("feat"))).toEqual({ kind: "subset", branches: { web: "feat" } });
+  });
+
+  test("every app (-a, or --apps naming them all) keeps the default shape", async () => {
+    fx = await createHubFixture(["api", "web"]);
+    await add({ name: "all", all: true });
+    await add({ name: "named", apps: "api,web" });
+
+    expect(await readWorkspaceMeta(workspacePath("all"))).toBeNull();
+    expect(await readWorkspaceMeta(workspacePath("named"))).toBeNull();
+  });
+
+  test("adding an app later extends the list", async () => {
+    fx = await createHubFixture(["api", "web", "docs"]);
+    await add({ name: "feat", apps: "api" });
+    await add({ name: "feat", apps: "web" });
+
+    expect((await readWorkspaceMeta(workspacePath("feat")))?.branches).toEqual({ api: "feat", web: "feat" });
+  });
+
+  test("adding to a workspace without metadata writes none", async () => {
+    fx = await createHubFixture(["api", "web"]);
+    await realFileSystemBackend.mkdirp(workspacePath("old"));
+    await add({ name: "old", apps: "api" });
+
+    expect(await readWorkspaceMeta(workspacePath("old"))).toBeNull();
+  });
+
+  test("an app that couldn't be added stays listed, so it still shows as missing", async () => {
+    fx = await createHubFixture(["api", "web", "docs"]);
+    fx.mock.getState(fx.barePath("api"))!.branches.add("develop");
+    await add({ name: "feat", apps: "api,web", from: "develop" });
+
+    expect((await readWorkspaceMeta(workspacePath("feat")))?.branches).toEqual({ api: "feat", web: "feat" });
   });
 });

@@ -7,6 +7,7 @@ import { type GitBackend, realGitBackend } from "../../adapters/git-backend.ts";
 import { copyEnvToWorktree } from "../../core/env.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs-backend.ts";
 import { hubArgs, resolveHub } from "../../core/hub.ts";
+import { readWorkspaceMeta, writeWorkspaceMeta } from "../../core/workspace-meta.ts";
 
 export type SelectAppsFn = (apps: string[]) => Promise<string[] | symbol>;
 
@@ -53,6 +54,39 @@ export function resolveAppsList(rawApps: string, bareRepos: string[], candidateA
     invalid,
     alreadyPresent: valid.filter((a) => !candidateApps.includes(a)),
   };
+}
+
+/**
+ * Keep the workspace's metadata in step with the apps just added, so status
+ * and doctor know which apps belong in it:
+ *
+ * - A workspace that already has metadata (subset, review, import) gets the new
+ *   apps added to its list.
+ * - A new workspace made with only some of the hub's apps gets subset metadata
+ *   listing them; without it, every other app would be reported missing.
+ * - Otherwise (every app, or apps added to a workspace without metadata) it keeps
+ *   the default shape and nothing is written.
+ *
+ * Apps that were selected but couldn't be added are listed on the workspace's
+ * branch, so they still show up as missing and `jade doctor --add-missing` retries them.
+ */
+async function recordWorkspaceApps(
+  workspacePath: string,
+  name: string,
+  existing: boolean,
+  selectedApps: string[],
+  skipped: string[],
+  branches: Record<string, string>,
+  bareRepos: string[],
+  fs: FileSystemBackend
+): Promise<void> {
+  const listed = { ...Object.fromEntries(skipped.map((app) => [app, name])), ...branches };
+  const meta = existing ? await readWorkspaceMeta(workspacePath, fs) : null;
+  if (meta) {
+    await writeWorkspaceMeta(workspacePath, { ...meta, branches: { ...meta.branches, ...listed } }, fs);
+  } else if (!existing && selectedApps.length < bareRepos.length) {
+    await writeWorkspaceMeta(workspacePath, { kind: "subset", branches: listed }, fs);
+  }
 }
 
 export function makeWorkspaceAddCommand(
@@ -156,6 +190,8 @@ export function makeWorkspaceAddCommand(
 
         const from = args.from as string | undefined;
         const created: string[] = [];
+        /** app -> the branch its worktree ended up on */
+        const branches: Record<string, string> = {};
         const skipped: string[] = [];
         const s = spinner();
         s.start(`Setting up apps for '${name}'`);
@@ -175,6 +211,7 @@ export function makeWorkspaceAddCommand(
               from ? { from } : undefined
             );
             created.push(actualBranch !== name ? `${appName} (${actualBranch})` : appName);
+            branches[appName] = actualBranch ?? name;
             s.message(`Added ${appName}`);
           } catch (error) {
             log.warn(`Could not add ${appName}: ${error}`);
@@ -189,6 +226,8 @@ export function makeWorkspaceAddCommand(
           cancel(`Could not add any apps to '${name}'.`);
           process.exit(1);
         }
+
+        await recordWorkspaceApps(worktreeDirPath, name, existing, selectedApps, skipped, branches, bareRepos, fs);
 
         const envCopied: string[] = [];
         for (const appName of selectedApps) {
