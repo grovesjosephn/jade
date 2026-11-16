@@ -22,17 +22,17 @@ describe("add command", () => {
     config: MockConfigBackend["config"],
     name = "ws"
   ) {
-    const workspacePath = join(tempDir.path, name);
+    const hubPath = join(tempDir.path, name);
     const initCmd = makeInitCommand(fs, config);
-    await initCmd.run!({ args: { path: workspacePath } } as any);
-    return workspacePath;
+    await initCmd.run!({ args: { path: hubPath } } as any);
+    return hubPath;
   }
 
   test("bare-clones repo into .bare and creates worktrees in main", async () => {
     tempDir = await createTempDir();
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
-    const workspacePath = await initWorkspace(fs, config);
+    const hubPath = await initWorkspace(fs, config);
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
 
@@ -40,13 +40,13 @@ describe("add command", () => {
       args: {
         repoNameOrUrl: "https://github.com/org/source",
         name: "source",
-        workspace: workspacePath,
+        hub: hubPath,
       },
     } as any);
 
-    const bareRepos = await listBareRepos(workspacePath, fs);
+    const bareRepos = await listBareRepos(hubPath, fs);
     expect(bareRepos.length).toBeGreaterThanOrEqual(1);
-    const jadeConfig = await config.readConfig(workspacePath);
+    const jadeConfig = await config.readConfig(hubPath);
     expect(jadeConfig.apps.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -54,7 +54,7 @@ describe("add command", () => {
     tempDir = await createTempDir();
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
-    const workspacePath = await initWorkspace(fs, config);
+    const hubPath = await initWorkspace(fs, config);
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
 
@@ -62,11 +62,11 @@ describe("add command", () => {
       args: {
         repoNameOrUrl: "https://github.com/org/myapp",
         name: "myapp",
-        workspace: workspacePath,
+        hub: hubPath,
       },
     } as any);
 
-    const jadeConfig = await config.readConfig(workspacePath);
+    const jadeConfig = await config.readConfig(hubPath);
     expect(getAppNames(jadeConfig)).toContain("myapp");
   });
 
@@ -74,7 +74,7 @@ describe("add command", () => {
     tempDir = await createTempDir();
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
-    const workspacePath = await initWorkspace(fs, config);
+    const hubPath = await initWorkspace(fs, config);
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
 
@@ -83,25 +83,25 @@ describe("add command", () => {
         repoNameOrUrl: "https://github.com/org/myapp",
         name: "myapp",
         branch: "master",
-        workspace: workspacePath,
+        hub: hubPath,
       },
     } as any);
 
-    const jadeConfig = await config.readConfig(workspacePath);
+    const jadeConfig = await config.readConfig(hubPath);
     expect(jadeConfig.apps).toContainEqual({ name: "myapp", defaultBranch: "master" });
   });
 
-  test("only creates a worktree in main, not in other existing groups", async () => {
+  test("only creates a worktree in main, not in other existing workspaces", async () => {
     tempDir = await createTempDir();
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
-    const workspacePath = await initWorkspace(fs, config);
-    await config.writeConfig(workspacePath, {
+    const hubPath = await initWorkspace(fs, config);
+    await config.writeConfig(hubPath, {
       version: "1.0",
       apps: [],
       orgUrl: "https://github.com/org",
     });
-    await fs.mkdirp(join(workspacePath, "workspace", "feat-auth"));
+    await fs.mkdirp(join(hubPath, "workspace", "feat-auth"));
 
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
@@ -110,12 +110,12 @@ describe("add command", () => {
       args: {
         repoNameOrUrl: "https://github.com/org/app",
         name: "app",
-        workspace: workspacePath,
+        hub: hubPath,
       },
     } as any);
 
-    expect(await fs.pathExists(join(workspacePath, "main", "app"))).toBe(true);
-    expect(await fs.pathExists(join(workspacePath, "workspace", "feat-auth", "app"))).toBe(false);
+    expect(await fs.pathExists(join(hubPath, "main", "app"))).toBe(true);
+    expect(await fs.pathExists(join(hubPath, "workspace", "feat-auth", "app"))).toBe(false);
   });
 });
 

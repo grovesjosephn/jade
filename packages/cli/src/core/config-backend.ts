@@ -6,8 +6,8 @@
 import { readConfig, writeConfig, type JadeConfig } from "./config.ts";
 
 export interface ConfigBackend {
-  readConfig(workspaceRoot: string): Promise<JadeConfig>;
-  writeConfig(workspaceRoot: string, config: Partial<JadeConfig>): Promise<void>;
+  readConfig(hub: string): Promise<JadeConfig>;
+  writeConfig(hub: string, config: Partial<JadeConfig>): Promise<void>;
 }
 
 /**

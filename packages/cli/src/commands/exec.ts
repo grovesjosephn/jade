@@ -1,9 +1,9 @@
 import { defineCommand } from "citty";
-import { resolve } from "path";
 import { cancel, log } from "../adapters/ui.ts";
-import { findWorkspaceRoot, getCurrentGroup, listWorktreeDirs } from "../core/layout.ts";
-import { resolveGroup } from "../core/group.ts";
+import { getCurrentWorkspace, listWorktreeDirs } from "../core/layout.ts";
+import { resolveWorkspace } from "../core/workspace.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
+import { hubArgs, resolveHub } from "../core/hub.ts";
 
 interface ExecResult {
   exitCode: number;
@@ -66,17 +66,17 @@ export function makeExecCommand(
     meta: {
       name: "exec",
       description:
-        "Run a command in every app of a workspace group: jade exec [-g group] [--apps a,b] [--parallel] -- <command...>",
+        "Run a command in every app of a workspace: jade exec [-g workspace] [--apps a,b] [--parallel] -- <command...>",
     },
     args: {
       group: {
         type: "string",
         alias: "g",
-        description: "Worktree group to run in (defaults to the current group, or 'main')",
+        description: "Workspace to run in (defaults to the current workspace, or 'main')",
       },
       apps: {
         type: "string",
-        description: "Comma-separated apps to run in (default: every app present in the group)",
+        description: "Comma-separated apps to run in (default: every app present in the workspace)",
       },
       parallel: {
         type: "boolean",
@@ -84,45 +84,39 @@ export function makeExecCommand(
         description: "Run in all apps at once; each app's output is printed when it finishes",
         default: false,
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
-      },
+      ...hubArgs,
     },
     async run({ args, rawArgs }) {
       const command = parseExecCommand(rawArgs ?? []);
       if (!command) {
-        cancel(`Usage: jade exec [-g group] [--apps a,b] [--parallel] -- <command...>`);
+        cancel(`Usage: jade exec [-g workspace] [--apps a,b] [--parallel] -- <command...>`);
         process.exit(1);
       }
 
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
-      const groupName =
-        (args.group as string | undefined) || getCurrentGroup(workspaceRoot, process.cwd()) || "main";
-      const groups = await listWorktreeDirs(workspaceRoot, fs);
-      if (!groups.includes(groupName)) {
-        cancel(`Worktree group '${groupName}' not found. See 'jade workspace list'.`);
+      const workspaceName =
+        (args.group as string | undefined) || getCurrentWorkspace(hub, process.cwd()) || "main";
+      const workspaces = await listWorktreeDirs(hub, fs);
+      if (!workspaces.includes(workspaceName)) {
+        cancel(`Workspace '${workspaceName}' not found. See 'jade workspace list'.`);
         process.exit(1);
       }
 
-      const group = await resolveGroup(workspaceRoot, groupName, fs);
-      let apps = group.apps.filter((a) => a.present);
+      const workspace = await resolveWorkspace(hub, workspaceName, fs);
+      let apps = workspace.apps.filter((a) => a.present);
 
       if (args.apps !== undefined) {
         const requested = (args.apps as string).split(",").map((a) => a.trim()).filter(Boolean);
         const missing = requested.filter((r) => !apps.some((a) => a.name === r));
         if (missing.length > 0) {
           cancel(
-            `Not in '${groupName}': ${missing.join(", ")}. Present: ${apps.map((a) => a.name).join(", ") || "none"}`
+            `Not in '${workspaceName}': ${missing.join(", ")}. Present: ${apps.map((a) => a.name).join(", ") || "none"}`
           );
           process.exit(1);
         }
@@ -130,13 +124,20 @@ export function makeExecCommand(
       }
 
       if (apps.length === 0) {
-        cancel(`No apps in '${groupName}'.`);
+        cancel(`No apps in '${workspaceName}'.`);
         process.exit(1);
       }
 
       const parallel = args.parallel as boolean;
       const header = (name: string) => `\n── ${name} ──`;
-      const envFor = (name: string) => ({ JADE_APP: name, JADE_GROUP: groupName, JADE_ROOT: workspaceRoot });
+      // JADE_GROUP and JADE_ROOT are the pre-0.4 names, kept so existing scripts keep working.
+      const envFor = (name: string) => ({
+        JADE_APP: name,
+        JADE_WORKSPACE: workspaceName,
+        JADE_HUB: hub,
+        JADE_GROUP: workspaceName,
+        JADE_ROOT: hub,
+      });
       const failed: { name: string; exitCode: number }[] = [];
 
       if (parallel) {
@@ -160,11 +161,11 @@ export function makeExecCommand(
       console.log("");
       const ok = apps.length - failed.length;
       if (failed.length === 0) {
-        log.success(`${ok}/${apps.length} succeeded in '${groupName}'`);
+        log.success(`${ok}/${apps.length} succeeded in '${workspaceName}'`);
         return;
       }
       log.error(
-        `${failed.length}/${apps.length} failed in '${groupName}': ` +
+        `${failed.length}/${apps.length} failed in '${workspaceName}': ` +
           failed.map((f) => `${f.name} (exit ${f.exitCode})`).join(", ")
       );
       process.exit(1);

@@ -5,14 +5,16 @@ into herdr-tui's UI. Version 0.1.0; see the [changelog](../../CHANGELOG.md).
 
 | Entry point | Kind | What it does |
 |---|---|---|
-| **Jade: Open workspace group** | action | Runs `jade open` for the focused pane's group. |
+| **Jade: Open workspace** | action | Runs `jade open` for the focused pane's workspace. |
 | **Jade: Sync env files** | action | Runs `jade env sync`. |
-| **Jade board** | overlay pane | Lists every group with its per-app branches. Pick one to open it, or create a new feature workspace. |
-| **Jade: Switch workspace** | overlay pane | A fast switcher. Groups that are already open float to the top and get focused instantly. Picking a closed group runs `jade open`. |
+| **Jade board** | overlay pane | Lists every workspace with its per-app branches. Pick one to open it, or create a new feature workspace. |
+| **Jade: Switch workspace** | overlay pane | A fast switcher. Workspaces that are already open float to the top and get focused instantly. Picking a closed workspace runs `jade open`. |
 
 Each script is a thin wrapper around the `jade` binary on your `PATH` (override
 it with `JADE_BIN_PATH`), so none of jade's logic is duplicated here. The panes
 get their data from `jade status --json --root` and `jade workspace list --json`.
+They pass `--root` rather than jade 0.4's `--summary`, and read `workspaces` or
+the older `groups`, so they work with a jade from before or after 0.4.
 It needs herdr-tui 0.7.0 or later and [Bun](https://bun.sh).
 
 ## Install
@@ -35,14 +37,14 @@ description = "Jade: switch workspace"
 ```
 
 `JADE_CWD` passes along the focused pane's directory, so the switcher finds the
-right workspace root whatever the plugin's own working directory is.
+right hub whatever the plugin's own working directory is.
 
 ## Layout
 
 - `herdr-plugin.toml`: the plugin's id, version, actions and panes.
 - `actions/`: `open-group.ts` and `sync-env.ts`.
 - `panes/`: `board.ts` and `switcher.ts`.
-- `lib/`: finding the jade root and driving herdr-tui, with tests in `lib/__tests__/`.
+- `lib/`: finding the jade hub, reading jade's JSON (`jade-json.ts`) and driving herdr-tui, with tests in `lib/__tests__/`.
 
 When you bump the version, change it in both `package.json` and `herdr-plugin.toml`.
 

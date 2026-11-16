@@ -93,31 +93,31 @@ describe("open command", () => {
   });
 
   async function setupWorkspaceWithApps(): Promise<{
-    workspacePath: string;
+    hubPath: string;
     fs: MockFileSystemBackend["fs"];
     config: MockConfigBackend["config"];
   }> {
     tempDir = await createTempDir();
-    const workspacePath = join(tempDir.path, "ws");
+    const hubPath = join(tempDir.path, "ws");
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
     const initCmd = makeInitCommand(fs, config);
-    await initCmd.run!({ args: { path: workspacePath } } as any);
+    await initCmd.run!({ args: { path: hubPath } } as any);
 
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/app1", name: "app1", workspace: workspacePath },
+      args: { repoNameOrUrl: "https://github.com/org/app1", name: "app1", hub: hubPath },
     } as any);
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/app2", name: "app2", workspace: workspacePath },
+      args: { repoNameOrUrl: "https://github.com/org/app2", name: "app2", hub: hubPath },
     } as any);
 
-    return { workspacePath, fs, config };
+    return { hubPath, fs, config };
   }
 
   test("creates a dedicated workspace with a renamed root tab plus one tab per app", async () => {
-    const { workspacePath, fs, config } = await setupWorkspaceWithApps();
+    const { hubPath, fs, config } = await setupWorkspaceWithApps();
     process.env.HERDR_ENV = "1";
     delete process.env.TMUX;
 
@@ -125,16 +125,16 @@ describe("open command", () => {
     const openCmd = makeOpenCommand(runHerdrTui, fs, config, unusedTmux, unusedAttach);
 
     await withCapturedConsole(() =>
-      openCmd.run!({ args: { workspace: workspacePath } } as any)
+      openCmd.run!({ args: { hub: hubPath } } as any)
     );
 
-    const mainPath = join(workspacePath, "main");
+    const mainPath = join(hubPath, "main");
     // Looks up existing workspaces, finds none, creates a new labeled workspace.
     expect(calls[0]).toEqual(["workspace", "list"]);
     expect(calls[1]).toEqual([
       "workspace", "create", "--cwd", mainPath, "--label", "main", "--focus",
     ]);
-    // Renames the workspace's initial tab to the group name.
+    // Renames the workspace's initial tab to the workspace name.
     expect(calls[2]).toEqual(["tab", "rename", "wNEW:t1", "main"]);
     // One tab per app, scoped to the new workspace, without stealing focus.
     expect(calls[3]).toEqual([
@@ -147,7 +147,7 @@ describe("open command", () => {
   });
 
   test("focuses the existing workspace instead of recreating it", async () => {
-    const { workspacePath, fs, config } = await setupWorkspaceWithApps();
+    const { hubPath, fs, config } = await setupWorkspaceWithApps();
     process.env.HERDR_ENV = "1";
     delete process.env.TMUX;
 
@@ -156,7 +156,7 @@ describe("open command", () => {
     const openCmd = makeOpenCommand(runHerdrTui, fs, config, unusedTmux, unusedAttach);
 
     await withCapturedConsole(() =>
-      openCmd.run!({ args: { workspace: workspacePath } } as any)
+      openCmd.run!({ args: { hub: hubPath } } as any)
     );
 
     expect(calls[0]).toEqual(["workspace", "list"]);
@@ -170,8 +170,8 @@ describe("open command", () => {
   // longer applies — tmux is now the fallback instead of an error; see the
   // "falls back to an interactive tmux attach..." test below.
 
-  test("exits when the requested group does not exist", async () => {
-    const { workspacePath, fs, config } = await setupWorkspaceWithApps();
+  test("exits when the requested workspace does not exist", async () => {
+    const { hubPath, fs, config } = await setupWorkspaceWithApps();
     process.env.HERDR_ENV = "1";
     delete process.env.TMUX;
 
@@ -179,13 +179,13 @@ describe("open command", () => {
     const openCmd = makeOpenCommand(runHerdrTui, fs, config, unusedTmux, unusedAttach);
 
     await expectsExit(() =>
-      openCmd.run!({ args: { group: "does-not-exist", workspace: workspacePath } } as any)
+      openCmd.run!({ args: { group: "does-not-exist", hub: hubPath } } as any)
     );
     expect(calls).toHaveLength(0);
   });
 
   test("creates a tmux session with a root window plus one window per app, already attached", async () => {
-    const { workspacePath, fs, config } = await setupWorkspaceWithApps();
+    const { hubPath, fs, config } = await setupWorkspaceWithApps();
     delete process.env.HERDR_ENV;
     process.env.TMUX = "/tmp/tmux-1000/default,12345,0";
 
@@ -193,10 +193,10 @@ describe("open command", () => {
     const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, unusedAttach);
 
     await withCapturedConsole(() =>
-      openCmd.run!({ args: { workspace: workspacePath } } as any)
+      openCmd.run!({ args: { hub: hubPath } } as any)
     );
 
-    const mainPath = join(workspacePath, "main");
+    const mainPath = join(hubPath, "main");
     expect(calls[0]).toEqual(["has-session", "-t", "main"]);
     expect(calls[1]).toEqual(["new-session", "-d", "-s", "main", "-n", "main", "-c", mainPath]);
     expect(calls[2]).toEqual(["new-window", "-t", "main:", "-n", "app1", "-c", join(mainPath, "app1")]);
@@ -208,7 +208,7 @@ describe("open command", () => {
   });
 
   test("switches to the existing tmux session instead of recreating it, already attached", async () => {
-    const { workspacePath, fs, config } = await setupWorkspaceWithApps();
+    const { hubPath, fs, config } = await setupWorkspaceWithApps();
     delete process.env.HERDR_ENV;
     process.env.TMUX = "/tmp/tmux-1000/default,12345,0";
 
@@ -216,7 +216,7 @@ describe("open command", () => {
     const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, unusedAttach);
 
     await withCapturedConsole(() =>
-      openCmd.run!({ args: { workspace: workspacePath } } as any)
+      openCmd.run!({ args: { hub: hubPath } } as any)
     );
 
     expect(calls[0]).toEqual(["has-session", "-t", "main"]);
@@ -226,7 +226,7 @@ describe("open command", () => {
   });
 
   test("falls back to an interactive tmux attach from a plain terminal (no herdr-tui, no tmux client)", async () => {
-    const { workspacePath, fs, config } = await setupWorkspaceWithApps();
+    const { hubPath, fs, config } = await setupWorkspaceWithApps();
     delete process.env.HERDR_ENV;
     delete process.env.TMUX;
 
@@ -234,9 +234,9 @@ describe("open command", () => {
     const { attachTmux, calls: attachCalls } = captureAttach(0);
     const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, attachTmux);
 
-    await expectsExit(() => openCmd.run!({ args: { workspace: workspacePath } } as any), 0);
+    await expectsExit(() => openCmd.run!({ args: { hub: hubPath } } as any), 0);
 
-    const mainPath = join(workspacePath, "main");
+    const mainPath = join(hubPath, "main");
     expect(calls[0]).toEqual(["has-session", "-t", "main"]);
     expect(calls[1]).toEqual(["new-session", "-d", "-s", "main", "-n", "main", "-c", mainPath]);
     expect(calls[2]).toEqual(["new-window", "-t", "main:", "-n", "app1", "-c", join(mainPath, "app1")]);
@@ -249,7 +249,7 @@ describe("open command", () => {
   });
 
   test("attaches straight to an existing session from a plain terminal", async () => {
-    const { workspacePath, fs, config } = await setupWorkspaceWithApps();
+    const { hubPath, fs, config } = await setupWorkspaceWithApps();
     delete process.env.HERDR_ENV;
     delete process.env.TMUX;
 
@@ -257,14 +257,14 @@ describe("open command", () => {
     const { attachTmux, calls: attachCalls } = captureAttach(0);
     const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, attachTmux);
 
-    await expectsExit(() => openCmd.run!({ args: { workspace: workspacePath } } as any), 0);
+    await expectsExit(() => openCmd.run!({ args: { hub: hubPath } } as any), 0);
 
     expect(calls).toEqual([["has-session", "-t", "main"]]);
     expect(attachCalls).toEqual(["main"]);
   });
 
   test("--tmux forces the tmux backend from inside herdr-tui, creating the session without attaching", async () => {
-    const { workspacePath, fs, config } = await setupWorkspaceWithApps();
+    const { hubPath, fs, config } = await setupWorkspaceWithApps();
     process.env.HERDR_ENV = "1";
     delete process.env.TMUX;
 
@@ -272,10 +272,10 @@ describe("open command", () => {
     const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, unusedAttach);
 
     await withCapturedConsole(() =>
-      openCmd.run!({ args: { workspace: workspacePath, tmux: true } } as any)
+      openCmd.run!({ args: { hub: hubPath, tmux: true } } as any)
     );
 
-    const mainPath = join(workspacePath, "main");
+    const mainPath = join(hubPath, "main");
     expect(calls[0]).toEqual(["has-session", "-t", "main"]);
     expect(calls[1]).toEqual(["new-session", "-d", "-s", "main", "-n", "main", "-c", mainPath]);
     expect(calls[2]).toEqual(["new-window", "-t", "main:", "-n", "app1", "-c", join(mainPath, "app1")]);
@@ -287,7 +287,7 @@ describe("open command", () => {
   });
 
   test("--tmux from inside herdr-tui with an existing session just leaves it running", async () => {
-    const { workspacePath, fs, config } = await setupWorkspaceWithApps();
+    const { hubPath, fs, config } = await setupWorkspaceWithApps();
     process.env.HERDR_ENV = "1";
     delete process.env.TMUX;
 
@@ -295,14 +295,14 @@ describe("open command", () => {
     const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, unusedAttach);
 
     await withCapturedConsole(() =>
-      openCmd.run!({ args: { workspace: workspacePath, tmux: true } } as any)
+      openCmd.run!({ args: { hub: hubPath, tmux: true } } as any)
     );
 
     expect(calls).toEqual([["has-session", "-t", "main"]]);
   });
 
   test("--tmux with an attached tmux client still switches, even inside herdr-tui", async () => {
-    const { workspacePath, fs, config } = await setupWorkspaceWithApps();
+    const { hubPath, fs, config } = await setupWorkspaceWithApps();
     process.env.HERDR_ENV = "1";
     process.env.TMUX = "/tmp/tmux-1000/default,12345,0";
 
@@ -310,7 +310,7 @@ describe("open command", () => {
     const openCmd = makeOpenCommand(unusedHerdrTui, fs, config, runTmux, unusedAttach);
 
     await withCapturedConsole(() =>
-      openCmd.run!({ args: { workspace: workspacePath, tmux: true } } as any)
+      openCmd.run!({ args: { hub: hubPath, tmux: true } } as any)
     );
 
     expect(calls).toEqual([

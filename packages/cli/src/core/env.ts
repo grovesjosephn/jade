@@ -1,22 +1,22 @@
 import { dirname, resolve } from "path";
-import { getWorktreeGroupPath } from "./layout.ts";
+import { getWorkspacePath } from "./layout.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
 
-export function getEnvDirPath(workspaceRoot: string): string {
-  return resolve(workspaceRoot, ".env");
+export function getEnvDirPath(hub: string): string {
+  return resolve(hub, ".env");
 }
 
-export function getAppEnvSourcePath(workspaceRoot: string, appName: string): string {
-  return resolve(workspaceRoot, ".env", appName, ".env");
+export function getAppEnvSourcePath(hub: string, appName: string): string {
+  return resolve(hub, ".env", appName, ".env");
 }
 
 export async function copyEnvToWorktree(
-  workspaceRoot: string,
+  hub: string,
   appName: string,
   worktreePath: string,
   fs: FileSystemBackend = realFileSystemBackend
 ): Promise<boolean> {
-  const sourcePath = getAppEnvSourcePath(workspaceRoot, appName);
+  const sourcePath = getAppEnvSourcePath(hub, appName);
   if (!await fs.pathExists(sourcePath)) return false;
 
   const destPath = resolve(worktreePath, ".env");
@@ -29,12 +29,12 @@ export async function copyEnvToWorktree(
  * worktrees), unless the app already has one. Returns whether it stored it.
  */
 export async function adoptEnv(
-  workspaceRoot: string,
+  hub: string,
   appName: string,
   sourceDir: string,
   fs: FileSystemBackend = realFileSystemBackend
 ): Promise<boolean> {
-  const store = getAppEnvSourcePath(workspaceRoot, appName);
+  const store = getAppEnvSourcePath(hub, appName);
   const source = resolve(sourceDir, ".env");
   if ((await fs.pathExists(store)) || !(await fs.pathExists(source))) return false;
   await fs.mkdirp(dirname(store));
@@ -47,23 +47,23 @@ export interface SyncResult {
   skipped: string[];
 }
 
-export async function syncEnvToGroup(
-  workspaceRoot: string,
-  groupName: string,
+export async function syncEnvToWorkspace(
+  hub: string,
+  workspaceName: string,
   appNames: readonly string[],
   fs: FileSystemBackend = realFileSystemBackend
 ): Promise<SyncResult> {
-  const groupPath = getWorktreeGroupPath(workspaceRoot, groupName);
+  const workspacePath = getWorkspacePath(hub, workspaceName);
   const copied: string[] = [];
   const skipped: string[] = [];
 
   for (const appName of appNames) {
-    const worktreePath = resolve(groupPath, appName);
+    const worktreePath = resolve(workspacePath, appName);
     if (!await fs.pathExists(worktreePath)) continue;
 
-    const didCopy = await copyEnvToWorktree(workspaceRoot, appName, worktreePath, fs);
+    const didCopy = await copyEnvToWorktree(hub, appName, worktreePath, fs);
     if (didCopy) {
-      copied.push(`${groupName}/${appName}`);
+      copied.push(`${workspaceName}/${appName}`);
     } else {
       skipped.push(appName);
     }

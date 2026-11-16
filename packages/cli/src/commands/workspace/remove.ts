@@ -1,10 +1,11 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, log, spinner } from "../../adapters/ui.ts";
-import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, listBareRepos } from "../../core/layout.ts";
+import { getBarePath, getWorkspacePath, listBareRepos } from "../../core/layout.ts";
 import { type GitBackend, realGitBackend } from "../../adapters/git-backend.ts";
 import { GitError } from "../../adapters/git-process.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs-backend.ts";
+import { hubArgs, resolveHub } from "../../core/hub.ts";
 
 export function makeWorkspaceRemoveCommand(
   git: GitBackend = realGitBackend,
@@ -33,21 +34,15 @@ export function makeWorkspaceRemoveCommand(
         description: "Force delete branches (use with --delete-branches)",
         default: false,
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
-      },
+      ...hubArgs,
     },
     async run({ args }) {
       intro(`Removing workspace`);
 
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
@@ -60,7 +55,7 @@ export function makeWorkspaceRemoveCommand(
         process.exit(1);
       }
 
-      const worktreeDirPath = getWorktreeGroupPath(workspaceRoot, name);
+      const worktreeDirPath = getWorkspacePath(hub, name);
 
       if (!await fs.pathExists(worktreeDirPath)) {
         cancel(`Workspace '${name}' not found`);
@@ -68,8 +63,8 @@ export function makeWorkspaceRemoveCommand(
       }
 
       try {
-        const bareRepos = await listBareRepos(workspaceRoot, fs);
-        const barePath = getBarePath(workspaceRoot);
+        const bareRepos = await listBareRepos(hub, fs);
+        const barePath = getBarePath(hub);
         const s = spinner();
         s.start(`Removing workspace '${name}'`);
 
@@ -105,7 +100,7 @@ export function makeWorkspaceRemoveCommand(
           }
 
           for (const appName of withBranch) {
-            const mainAppPath = resolve(workspaceRoot, "main", appName);
+            const mainAppPath = resolve(hub, "main", appName);
             if (await fs.pathExists(mainAppPath)) {
               // An unpublished app has no other copy of the branch, so -f would
               // destroy unmerged work outright. Fall back to a safe delete there.

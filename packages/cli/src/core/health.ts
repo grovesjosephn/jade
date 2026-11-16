@@ -1,14 +1,14 @@
 import { resolve } from "path";
-import type { ResolvedGroup } from "./group.ts";
+import type { ResolvedWorkspace } from "./workspace.ts";
 import { getAppEnvSourcePath } from "./env.ts";
 import type { GitBackend, WorktreeStatus } from "../adapters/git-backend.ts";
 import type { FileSystemBackend } from "../adapters/fs-backend.ts";
 import { getAppDefaultBranch, type JadeConfig } from "./config.ts";
 import { getBarePath } from "./layout.ts";
-import { expectedBranch, type GroupMeta } from "./group-meta.ts";
+import { expectedBranch, type WorkspaceMeta } from "./workspace-meta.ts";
 
 /**
- * Per-app health checks for one worktree group, shared by `jade status`
+ * Per-app health checks for one workspace, shared by `jade status`
  * (which reports them) and `jade doctor` (which acts on them).
  */
 
@@ -32,7 +32,7 @@ export interface AppReport {
   present: boolean;
   path: string;
   branch: string | null;
-  /** The branch this group expects the app on; null when the app isn't expected here */
+  /** The branch this workspace expects the app on; null when the app isn't expected here */
   expectedBranch: string | null;
   drift: boolean;
   detached: boolean;
@@ -44,28 +44,28 @@ export interface AppReport {
 }
 
 /**
- * The branch an app should be on in a group. `main` tracks each app's default
- * branch (which isn't necessarily called "main"); other groups follow their
- * metadata, else the group name.
+ * The branch an app should be on in a workspace. `main` tracks each app's default
+ * branch (which isn't necessarily called "main"); other workspaces follow their
+ * metadata, else the workspace name.
  */
 async function resolveExpectedBranch(
-  workspaceRoot: string,
-  group: ResolvedGroup,
+  hub: string,
+  workspace: ResolvedWorkspace,
   appName: string,
   git: GitBackend,
   config: JadeConfig,
-  meta: GroupMeta | null
+  meta: WorkspaceMeta | null
 ): Promise<string | null> {
-  if (group.isMain) {
+  if (workspace.isMain) {
     const configured = getAppDefaultBranch(config, appName);
     if (configured) return configured;
     try {
-      return await git.getDefaultBranch(resolve(getBarePath(workspaceRoot), appName));
+      return await git.getDefaultBranch(resolve(getBarePath(hub), appName));
     } catch {
       return "main";
     }
   }
-  return expectedBranch(group.name, appName, meta);
+  return expectedBranch(workspace.name, appName, meta);
 }
 
 /**
@@ -76,17 +76,17 @@ async function resolveExpectedBranch(
  * and two stats per app — so the interactive path costs one git call per app.
  */
 export async function collectApps(
-  workspaceRoot: string,
-  group: ResolvedGroup,
+  hub: string,
+  workspace: ResolvedWorkspace,
   git: GitBackend,
   fs: FileSystemBackend,
   config: JadeConfig,
-  meta: GroupMeta | null,
+  meta: WorkspaceMeta | null,
   detailed: boolean
 ): Promise<AppReport[]> {
   return await Promise.all(
-    group.apps.map(async (app): Promise<AppReport> => {
-      const expected = await resolveExpectedBranch(workspaceRoot, group, app.name, git, config, meta);
+    workspace.apps.map(async (app): Promise<AppReport> => {
+      const expected = await resolveExpectedBranch(hub, workspace, app.name, git, config, meta);
 
       if (!app.present) {
         return {
@@ -107,12 +107,12 @@ export async function collectApps(
       const env = detailed
         ? {
             present: await fs.pathExists(resolve(app.path, ".env")),
-            sourceAvailable: await fs.pathExists(getAppEnvSourcePath(workspaceRoot, app.name)),
+            sourceAvailable: await fs.pathExists(getAppEnvSourcePath(hub, app.name)),
           }
         : null;
       // A config read, not a network call; still gated, to keep the terse view at one git call per app.
       const published = detailed
-        ? await git.hasOrigin(resolve(getBarePath(workspaceRoot), app.name)).catch(() => null)
+        ? await git.hasOrigin(resolve(getBarePath(hub), app.name)).catch(() => null)
         : null;
 
       try {
@@ -160,18 +160,18 @@ export async function collectApps(
   );
 }
 
-export function buildAttention(group: ResolvedGroup, apps: AppReport[]): Attention[] {
+export function buildAttention(workspace: ResolvedWorkspace, apps: AppReport[]): Attention[] {
   const attention: Attention[] = [];
 
   for (const app of apps) {
     if (!app.present) {
-      // A group with metadata (e.g. a review) leaves some apps out on purpose.
+      // A workspace with metadata (e.g. a review) leaves some apps out on purpose.
       if (app.expectedBranch !== null) {
         attention.push({
           app: app.name,
           kind: "missing-worktree",
           message: "no worktree in this workspace",
-          fix: `jade workspace add ${group.name} --apps ${app.name}`,
+          fix: `jade workspace add ${workspace.name} --apps ${app.name}`,
         });
       }
       continue;
@@ -186,7 +186,7 @@ export function buildAttention(group: ResolvedGroup, apps: AppReport[]): Attenti
       continue;
     }
 
-    const target = app.expectedBranch ?? group.name;
+    const target = app.expectedBranch ?? workspace.name;
 
     if (app.detached) {
       attention.push({
@@ -194,7 +194,7 @@ export function buildAttention(group: ResolvedGroup, apps: AppReport[]): Attenti
         kind: "detached-head",
         message: "detached HEAD, not on a branch",
         // `jade checkout --app` resolves the app relative to cwd.
-        fix: `cd ${group.path} && jade checkout ${target} --app ${app.name}`,
+        fix: `cd ${workspace.path} && jade checkout ${target} --app ${app.name}`,
       });
     } else if (app.drift) {
       attention.push({
@@ -203,7 +203,7 @@ export function buildAttention(group: ResolvedGroup, apps: AppReport[]): Attenti
         message:
           `on '${app.branch}', not '${target}' ` +
           `(the branch was likely already checked out in another workspace)`,
-        fix: `cd ${group.path} && jade checkout ${target} --app ${app.name}`,
+        fix: `cd ${workspace.path} && jade checkout ${target} --app ${app.name}`,
       });
     }
 

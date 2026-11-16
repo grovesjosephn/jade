@@ -4,8 +4,8 @@ import { join } from "path";
 import { makeReviewCommand, matchesTicket, parsePicks } from "../review.ts";
 import { ghRepoPrefix, type GhRunner } from "../../adapters/gh.ts";
 import { expectsExit } from "../../test/helpers.ts";
-import { createWorkspaceFixture, type WorkspaceFixture } from "../../test/workspace-fixture.ts";
-import { readGroupMeta } from "../../core/group-meta.ts";
+import { createHubFixture, type HubFixture } from "../../test/hub-fixture.ts";
+import { readWorkspaceMeta } from "../../core/workspace-meta.ts";
 import { realFileSystemBackend } from "../../adapters/fs-backend.ts";
 import { realConfigBackend } from "../../core/config-backend.ts";
 
@@ -57,7 +57,7 @@ describe("parsePicks", () => {
 });
 
 describe("review command", () => {
-  let fx: WorkspaceFixture;
+  let fx: HubFixture;
 
   afterEach(async () => {
     if (fx) await fx.tempDir.cleanup();
@@ -65,22 +65,22 @@ describe("review command", () => {
 
   const review = (gh: GhRunner, args: Record<string, unknown>) =>
     makeReviewCommand(fx.mock.git, realFileSystemBackend, realConfigBackend, gh).run!({
-      args: { gh: true, workspace: fx.root, ...args },
+      args: { gh: true, hub: fx.root, ...args },
     } as any);
 
-  test("creates the group with only matching apps, each on its real branch", async () => {
-    fx = await createWorkspaceFixture(["api", "web", "docs"]);
+  test("creates the workspace with only matching apps, each on its real branch", async () => {
+    fx = await createHubFixture(["api", "web", "docs"]);
     fx.mock.getState(fx.barePath("api"))!.remoteBranches.add("feature/JADE-7-login");
     fx.mock.getState(fx.barePath("web"))!.remoteBranches.add("JADE-77");
 
     await review(noGh, { ticket: "JADE-7" });
 
-    const groupPath = join(fx.root, "workspace", "JADE-7");
+    const workspacePath = join(fx.root, "workspace", "JADE-7");
     expect(fx.mock.getState(fx.barePath("api"))!.worktrees.get(fx.appPath("JADE-7", "api"))).toBe(
       "feature/JADE-7-login"
     );
     expect(fx.mock.getState(fx.barePath("web"))!.worktrees.has(fx.appPath("JADE-7", "web"))).toBe(false);
-    expect(await readGroupMeta(groupPath)).toEqual({
+    expect(await readWorkspaceMeta(workspacePath)).toEqual({
       kind: "review",
       ticket: "JADE-7",
       branches: { api: "feature/JADE-7-login" },
@@ -91,7 +91,7 @@ describe("review command", () => {
   });
 
   test("leaves ambiguous apps out until --pick chooses one", async () => {
-    fx = await createWorkspaceFixture(["api", "web"]);
+    fx = await createHubFixture(["api", "web"]);
     fx.mock.getState(fx.barePath("api"))!.remoteBranches.add("JADE-7-api");
     const web = fx.mock.getState(fx.barePath("web"))!;
     web.remoteBranches.add("JADE-7-ui");
@@ -100,17 +100,17 @@ describe("review command", () => {
     await review(noGh, { ticket: "JADE-7" });
     expect(web.worktrees.has(fx.appPath("JADE-7", "web"))).toBe(false);
 
-    // Re-running adds to the same review group.
+    // Re-running adds to the same review workspace.
     await review(noGh, { ticket: "JADE-7", pick: "web=JADE-7-ui" });
     expect(web.worktrees.get(fx.appPath("JADE-7", "web"))).toBe("JADE-7-ui");
-    expect((await readGroupMeta(join(fx.root, "workspace", "JADE-7")))!.branches).toEqual({
+    expect((await readWorkspaceMeta(join(fx.root, "workspace", "JADE-7")))!.branches).toEqual({
       api: "JADE-7-api",
       web: "JADE-7-ui",
     });
   });
 
   test("adds open PR head branches found with gh", async () => {
-    fx = await createWorkspaceFixture(["api"]);
+    fx = await createHubFixture(["api"]);
     await realConfigBackend.writeConfig(fx.root, { orgUrl: "https://github.com/acme" });
     fx.mock.getState(fx.barePath("api"))!.remoteBranches.add("login-rework");
 
@@ -135,7 +135,7 @@ describe("review command", () => {
   });
 
   test("dry run creates nothing", async () => {
-    fx = await createWorkspaceFixture(["api"]);
+    fx = await createHubFixture(["api"]);
     fx.mock.getState(fx.barePath("api"))!.remoteBranches.add("JADE-7");
 
     await review(noGh, { ticket: "JADE-7", dryRun: true });
@@ -143,15 +143,15 @@ describe("review command", () => {
     expect(await realFileSystemBackend.pathExists(join(fx.root, "workspace", "JADE-7"))).toBe(false);
   });
 
-  test("refuses to take over a group it didn't create", async () => {
-    fx = await createWorkspaceFixture(["api"]);
+  test("refuses to take over a workspace it didn't create", async () => {
+    fx = await createHubFixture(["api"]);
     await mkdir(join(fx.root, "workspace", "JADE-7"), { recursive: true });
 
     await expectsExit(() => review(noGh, { ticket: "JADE-7" }));
   });
 
   test("exits non-zero when only ambiguous matches exist", async () => {
-    fx = await createWorkspaceFixture(["web"]);
+    fx = await createHubFixture(["web"]);
     const web = fx.mock.getState(fx.barePath("web"))!;
     web.remoteBranches.add("JADE-7-a");
     web.remoteBranches.add("JADE-7-b");

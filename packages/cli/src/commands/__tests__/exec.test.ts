@@ -2,7 +2,7 @@ import { describe, test, expect, afterEach } from "bun:test";
 import { makeExecCommand, parseExecCommand, type ExecRunner } from "../exec.ts";
 import { makeWorkspaceAddCommand } from "../workspace/add.ts";
 import { expectsExit, withCapturedConsole } from "../../test/helpers.ts";
-import { createWorkspaceFixture, type WorkspaceFixture } from "../../test/workspace-fixture.ts";
+import { createHubFixture, type HubFixture } from "../../test/hub-fixture.ts";
 import { realFileSystemBackend } from "../../adapters/fs-backend.ts";
 
 describe("parseExecCommand", () => {
@@ -21,7 +21,7 @@ describe("parseExecCommand", () => {
 });
 
 describe("exec command", () => {
-  let fx: WorkspaceFixture;
+  let fx: HubFixture;
 
   afterEach(async () => {
     if (fx) await fx.tempDir.cleanup();
@@ -38,26 +38,32 @@ describe("exec command", () => {
 
   const exec = (runner: ExecRunner, args: Record<string, unknown>, command: string[]) =>
     makeExecCommand(realFileSystemBackend, runner).run!({
-      args: { workspace: fx.root, parallel: false, ...args },
+      args: { hub: fx.root, parallel: false, ...args },
       rawArgs: ["--", ...command],
     } as any);
 
-  test("runs in every present app of the group, in order, with JADE_* env", async () => {
-    fx = await createWorkspaceFixture(["api", "web"]);
+  test("runs in every present app of the workspace, in order, with JADE_* env", async () => {
+    fx = await createHubFixture(["api", "web"]);
     const { runs, runner } = recordingRunner();
 
     await withCapturedConsole(() => exec(runner, { group: "main" }, ["git", "status"]));
 
     expect(runs.map((r) => r.cwd)).toEqual([fx.appPath("main", "api"), fx.appPath("main", "web")]);
     expect(runs[0]!.argv).toEqual(["git", "status"]);
-    expect(runs[0]!.env).toEqual({ JADE_APP: "api", JADE_GROUP: "main", JADE_ROOT: fx.root });
+    expect(runs[0]!.env).toEqual({
+      JADE_APP: "api",
+      JADE_WORKSPACE: "main",
+      JADE_HUB: fx.root,
+      JADE_GROUP: "main",
+      JADE_ROOT: fx.root,
+    });
     expect(runs[0]!.capture).toBe(false);
   });
 
-  test("--apps limits the run and skips apps absent from the group", async () => {
-    fx = await createWorkspaceFixture(["api", "web"]);
+  test("--apps limits the run and skips apps absent from the workspace", async () => {
+    fx = await createHubFixture(["api", "web"]);
     await makeWorkspaceAddCommand(fx.mock.git).run!({
-      args: { name: "feat", apps: "web", workspace: fx.root },
+      args: { name: "feat", apps: "web", hub: fx.root },
     } as any);
     const { runs, runner } = recordingRunner();
 
@@ -68,7 +74,7 @@ describe("exec command", () => {
   });
 
   test("keeps going after a failure, then exits 1", async () => {
-    fx = await createWorkspaceFixture(["api", "web"]);
+    fx = await createHubFixture(["api", "web"]);
     const { runs, runner } = recordingRunner(["api"]);
 
     await expectsExit(async () => {
@@ -78,7 +84,7 @@ describe("exec command", () => {
   });
 
   test("--parallel captures output per app", async () => {
-    fx = await createWorkspaceFixture(["api", "web"]);
+    fx = await createHubFixture(["api", "web"]);
     const { runs, runner } = recordingRunner();
 
     const out = await withCapturedConsole(() => exec(runner, { group: "main", parallel: true }, ["ls"]));
@@ -87,8 +93,8 @@ describe("exec command", () => {
     expect(out.filter((l) => l === "ok")).toHaveLength(2);
   });
 
-  test("exits 1 without a command or for an unknown group", async () => {
-    fx = await createWorkspaceFixture(["api"]);
+  test("exits 1 without a command or for an unknown workspace", async () => {
+    fx = await createHubFixture(["api"]);
     const { runner } = recordingRunner();
 
     await expectsExit(() => exec(runner, { group: "main" }, []));

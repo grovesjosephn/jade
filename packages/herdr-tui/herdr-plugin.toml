@@ -2,12 +2,12 @@ id = "josephgroves.jade"
 name = "Jade Workspaces"
 version = "0.1.0"
 min_herdr_version = "0.7.0"
-description = "Manage jade multi-repo workspaces from herdr-tui: open groups as tabs, sync env files, and browse/create workspaces from a board pane."
+description = "Manage jade multi-repo workspaces from herdr-tui: open jade workspaces in herdr-tui, sync env files, and browse or create workspaces from a board pane."
 platforms = ["linux", "macos", "windows"]
 
 [[actions]]
 id = "open-group"
-title = "Jade: Open workspace group"
+title = "Jade: Open workspace"
 contexts = ["workspace"]
 command = ["bun", "actions/open-group.ts"]
 

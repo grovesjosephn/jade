@@ -1,9 +1,10 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, log, setJsonMode } from "../../adapters/ui.ts";
-import { findWorkspaceRoot, getWorktreeGroupPath, listBareRepos, listWorktreeDirs } from "../../core/layout.ts";
+import { getWorkspacePath, listBareRepos, listWorktreeDirs } from "../../core/layout.ts";
 import { type GitBackend, realGitBackend } from "../../adapters/git-backend.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs-backend.ts";
+import { hubArgs, resolveHub } from "../../core/hub.ts";
 
 export function makeWorkspaceListCommand(
   git: GitBackend = realGitBackend,
@@ -15,11 +16,7 @@ export function makeWorkspaceListCommand(
       description: "List all workspaces",
     },
     args: {
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
-      },
+      ...hubArgs,
       json: {
         type: "boolean",
         description: "Print machine-readable JSON instead of plain text",
@@ -31,35 +28,33 @@ export function makeWorkspaceListCommand(
       setJsonMode(asJson);
       if (!asJson) intro(`Workspaces`);
 
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
       try {
-        const worktreeDirs = await listWorktreeDirs(workspaceRoot, fs);
-        const bareRepos = await listBareRepos(workspaceRoot, fs);
+        const worktreeDirs = await listWorktreeDirs(hub, fs);
+        const bareRepos = await listBareRepos(hub, fs);
 
         if (worktreeDirs.length === 0) {
           if (asJson) {
-            console.log(JSON.stringify({ groups: [] }));
+            console.log(JSON.stringify({ workspaces: [], groups: [] }));
           } else {
             outro(`No workspaces found.`);
           }
           return;
         }
 
-        const groups: { name: string; apps: { name: string; branch: string }[] }[] = [];
+        const workspaces: { name: string; apps: { name: string; branch: string }[] }[] = [];
 
         for (const dirName of worktreeDirs) {
           const lines: string[] = [];
           const apps: { name: string; branch: string }[] = [];
           for (const appName of bareRepos) {
-            const appPath = resolve(getWorktreeGroupPath(workspaceRoot, dirName), appName);
+            const appPath = resolve(getWorkspacePath(hub, dirName), appName);
             if (await fs.pathExists(appPath)) {
               try {
                 const branch = await git.currentBranch(appPath);
@@ -71,7 +66,7 @@ export function makeWorkspaceListCommand(
               }
             }
           }
-          groups.push({ name: dirName, apps });
+          workspaces.push({ name: dirName, apps });
 
           if (!asJson) {
             if (lines.length > 0) {
@@ -83,7 +78,8 @@ export function makeWorkspaceListCommand(
         }
 
         if (asJson) {
-          console.log(JSON.stringify({ groups }));
+          // `groups` is the pre-0.4 name, kept so older readers keep working.
+          console.log(JSON.stringify({ workspaces, groups: workspaces }));
         } else {
           outro(`Done`);
         }

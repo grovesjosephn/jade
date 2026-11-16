@@ -21,11 +21,11 @@ describe("checkout command", () => {
   async function setupWorkspaceWithApp(appName = "app") {
     // Resolve symlinks (macOS /var -> /private/var) so paths match process.cwd()
     const realTmpPath = await realpath(tempDir.path);
-    const workspacePath = join(realTmpPath, "ws");
+    const hubPath = join(realTmpPath, "ws");
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
     const initCmd = makeInitCommand(fs, config);
-    await initCmd.run!({ args: { path: workspacePath } } as any);
+    await initCmd.run!({ args: { path: hubPath } } as any);
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
 
@@ -33,61 +33,61 @@ describe("checkout command", () => {
       args: {
         repoNameOrUrl: `https://github.com/org/${appName}`,
         name: appName,
-        workspace: workspacePath,
+        hub: hubPath,
       },
     } as any);
 
-    return { workspacePath, git, fs };
+    return { hubPath, git, fs };
   }
 
   test("checks out existing branch", async () => {
     tempDir = await createTempDir();
     originalCwd = process.cwd();
-    const { workspacePath, git, fs } = await setupWorkspaceWithApp();
+    const { hubPath, git, fs } = await setupWorkspaceWithApp();
 
     // The worktree directory itself is real (created for real by the git
     // fake's worktreeAdd), so process.chdir into it works regardless of the
     // injected filesystem fake — intentionally still real disk here.
-    process.chdir(join(workspacePath, "main", "app"));
+    process.chdir(join(hubPath, "main", "app"));
 
     const checkoutCmd = makeCheckoutCommand(git, fs);
     await checkoutCmd.run!({
-      args: { branch: "feat-b", workspace: workspacePath },
+      args: { branch: "feat-b", hub: hubPath },
     } as any);
 
-    const branch = await git.currentBranch(join(workspacePath, "main", "app"));
+    const branch = await git.currentBranch(join(hubPath, "main", "app"));
     expect(branch).toBe("feat-b");
   });
 
   test("creates and checks out new branch with -c", async () => {
     tempDir = await createTempDir();
     originalCwd = process.cwd();
-    const { workspacePath, git, fs } = await setupWorkspaceWithApp();
+    const { hubPath, git, fs } = await setupWorkspaceWithApp();
 
-    process.chdir(join(workspacePath, "main", "app"));
+    process.chdir(join(hubPath, "main", "app"));
 
     const checkoutCmd = makeCheckoutCommand(git, fs);
     await checkoutCmd.run!({
-      args: { branch: "feat-new", create: true, workspace: workspacePath },
+      args: { branch: "feat-new", create: true, hub: hubPath },
     } as any);
 
-    const branch = await git.currentBranch(join(workspacePath, "main", "app"));
+    const branch = await git.currentBranch(join(hubPath, "main", "app"));
     expect(branch).toBe("feat-new");
   });
 
   test("scopes to single app when --app provided", async () => {
     tempDir = await createTempDir();
     originalCwd = process.cwd();
-    const { workspacePath, git, fs } = await setupWorkspaceWithApp();
+    const { hubPath, git, fs } = await setupWorkspaceWithApp();
 
-    process.chdir(join(workspacePath, "main"));
+    process.chdir(join(hubPath, "main"));
 
     const checkoutCmd = makeCheckoutCommand(git, fs);
     await checkoutCmd.run!({
-      args: { branch: "feat-x", app: "app", workspace: workspacePath },
+      args: { branch: "feat-x", app: "app", hub: hubPath },
     } as any);
 
-    const branch = await git.currentBranch(join(workspacePath, "main", "app"));
+    const branch = await git.currentBranch(join(hubPath, "main", "app"));
     expect(branch).toBe("feat-x");
   });
 });

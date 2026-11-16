@@ -19,43 +19,43 @@ describe("remove command", () => {
 
   test("removes worktrees, bare repo, and app from jade.json", async () => {
     tempDir = await createTempDir();
-    const workspacePath = join(tempDir.path, "ws");
+    const hubPath = join(tempDir.path, "ws");
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
     const initCmd = makeInitCommand(fs, config);
-    await initCmd.run!({ args: { path: workspacePath } } as any);
+    await initCmd.run!({ args: { path: hubPath } } as any);
 
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
     const removeCmd = makeRemoveCommand(git, fs, config);
 
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/toremove", name: "toremove", workspace: workspacePath },
+      args: { repoNameOrUrl: "https://github.com/org/toremove", name: "toremove", hub: hubPath },
     } as any);
 
     await removeCmd.run!({
-      args: { name: "toremove", workspace: workspacePath },
+      args: { name: "toremove", hub: hubPath },
     } as any);
 
-    const bareRepos = await listBareRepos(workspacePath, fs);
+    const bareRepos = await listBareRepos(hubPath, fs);
     expect(bareRepos).not.toContain("toremove");
-    const jadeConfig = await config.readConfig(workspacePath);
+    const jadeConfig = await config.readConfig(hubPath);
     expect(getAppNames(jadeConfig)).not.toContain("toremove");
   });
 
   test("errors when app does not exist", async () => {
     tempDir = await createTempDir();
-    const workspacePath = join(tempDir.path, "ws");
+    const hubPath = join(tempDir.path, "ws");
     const { fs } = createMockFileSystemBackend();
     const { config } = createMockConfigBackend();
     const initCmd = makeInitCommand(fs, config);
-    await initCmd.run!({ args: { path: workspacePath } } as any);
+    await initCmd.run!({ args: { path: hubPath } } as any);
 
     const { git } = createMockGitBackend();
     const removeCmd = makeRemoveCommand(git, fs, config);
 
     await expectsExit(() =>
-      removeCmd.run!({ args: { name: "nonexistent", workspace: workspacePath } } as any)
+      removeCmd.run!({ args: { name: "nonexistent", hub: hubPath } } as any)
     );
   });
 });

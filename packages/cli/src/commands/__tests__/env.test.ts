@@ -16,13 +16,13 @@ import { createMockConfigBackend, type MockConfigBackend } from "../../test/mock
 const selectAll: SelectAppsFn = async (apps) => apps;
 
 async function setupWorkspaceWithEnv(
-  workspacePath: string,
+  hubPath: string,
   fs: MockFileSystemBackend["fs"],
   config: MockConfigBackend["config"],
   apps: { name: string; envContent: string }[]
 ) {
   const initCmd = makeInitCommand(fs, config);
-  await initCmd.run!({ args: { path: workspacePath } } as any);
+  await initCmd.run!({ args: { path: hubPath } } as any);
 
   const { git } = createMockGitBackend();
   const addCmd = makeAddCommand(git, fs, config);
@@ -32,11 +32,11 @@ async function setupWorkspaceWithEnv(
       args: {
         repoNameOrUrl: `https://github.com/org/${app.name}`,
         name: app.name,
-        workspace: workspacePath,
+        hub: hubPath,
       },
     } as any);
 
-    const envDir = join(workspacePath, ".env", app.name);
+    const envDir = join(hubPath, ".env", app.name);
     await fs.writeFile(join(envDir, ".env"), app.envContent);
   }
 
@@ -60,12 +60,12 @@ describe("env sync command", () => {
     ]);
 
     const syncCmd = makeEnvSyncCommand(fs);
-    await syncCmd.run!({ args: { workspace: ws } } as any);
+    await syncCmd.run!({ args: { hub: ws } } as any);
 
     expect(getFileContent(join(ws, "main", "api", ".env"))).toBe("API_KEY=secret\n");
   });
 
-  test("copies env files to all worktree groups", async () => {
+  test("copies env files to all workspaces", async () => {
     tempDir = await createTempDir();
     const ws = join(tempDir.path, "ws");
     const { fs, getFileContent } = createMockFileSystemBackend();
@@ -75,10 +75,10 @@ describe("env sync command", () => {
     ]);
 
     const workspaceAddCmd = makeWorkspaceAddCommand(git, selectAll, fs);
-    await workspaceAddCmd.run!({ args: { name: "feat-x", workspace: ws } } as any);
+    await workspaceAddCmd.run!({ args: { name: "feat-x", hub: ws } } as any);
 
     const syncCmd = makeEnvSyncCommand(fs);
-    await syncCmd.run!({ args: { workspace: ws } } as any);
+    await syncCmd.run!({ args: { hub: ws } } as any);
 
     expect(getFileContent(join(ws, "main", "api", ".env"))).toBe("DB=postgres\n");
     expect(getFileContent(join(ws, "workspace", "feat-x", "api", ".env"))).toBe("DB=postgres\n");
@@ -95,7 +95,7 @@ describe("env sync command", () => {
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/api", name: "api", workspace: ws },
+      args: { repoNameOrUrl: "https://github.com/org/api", name: "api", hub: ws },
     } as any);
 
     // Create .env/ dir but no .env/api/.env
@@ -103,7 +103,7 @@ describe("env sync command", () => {
 
     const syncCmd = makeEnvSyncCommand(fs);
     const logs = await withCapturedConsole(() =>
-      syncCmd.run!({ args: { workspace: ws } } as any)
+      syncCmd.run!({ args: { hub: ws } } as any)
     );
 
     expect(logs.some((l) => l.includes("No source .env for"))).toBe(true);
@@ -119,7 +119,7 @@ describe("env sync command", () => {
 
     const syncCmd = makeEnvSyncCommand(fs);
     await expectsExit(() =>
-      syncCmd.run!({ args: { workspace: ws } } as any)
+      syncCmd.run!({ args: { hub: ws } } as any)
     );
   });
 
@@ -133,7 +133,7 @@ describe("env sync command", () => {
     ]);
 
     const workspaceAddCmd = makeWorkspaceAddCommand(git, selectAll, fs);
-    await workspaceAddCmd.run!({ args: { name: "feat-env", workspace: ws } } as any);
+    await workspaceAddCmd.run!({ args: { name: "feat-env", hub: ws } } as any);
 
     expect(getFileContent(join(ws, "workspace", "feat-env", "api", ".env"))).toBe("SECRET=xyz\n");
   });
@@ -149,11 +149,11 @@ describe("env sync command", () => {
     const { git } = createMockGitBackend();
     const addCmd = makeAddCommand(git, fs, config);
     await addCmd.run!({
-      args: { repoNameOrUrl: "https://github.com/org/api", name: "api", workspace: ws },
+      args: { repoNameOrUrl: "https://github.com/org/api", name: "api", hub: ws },
     } as any);
 
     const workspaceAddCmd = makeWorkspaceAddCommand(git, selectAll, fs);
-    await workspaceAddCmd.run!({ args: { name: "feat-no-env", workspace: ws } } as any);
+    await workspaceAddCmd.run!({ args: { name: "feat-no-env", hub: ws } } as any);
 
     expect(await fs.pathExists(join(ws, "workspace", "feat-no-env", "api", ".env"))).toBe(false);
   });
@@ -169,7 +169,7 @@ describe("env sync command", () => {
     ]);
 
     const syncCmd = makeEnvSyncCommand(fs);
-    await syncCmd.run!({ args: { workspace: ws } } as any);
+    await syncCmd.run!({ args: { hub: ws } } as any);
 
     expect(getFileContent(join(ws, "main", "api", ".env"))).toBe("A=1\n");
     expect(getFileContent(join(ws, "main", "web", ".env"))).toBe("B=2\n");

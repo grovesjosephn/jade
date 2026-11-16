@@ -1,6 +1,6 @@
 import { describe, test, expect, afterEach } from "bun:test";
 import { existsSync } from "fs";
-import { makeCreateCommand, selectGroups } from "../create.ts";
+import { makeCreateCommand, selectWorkspaces } from "../create.ts";
 import { makePublishCommand } from "../publish.ts";
 import type { GhRunner } from "../../adapters/gh.ts";
 import { makeRemoveCommand } from "../remove.ts";
@@ -8,14 +8,14 @@ import { makeWorkspaceAddCommand } from "../workspace/add.ts";
 import { makeWorkspaceRemoveCommand } from "../workspace/remove.ts";
 import { makeWorkspaceUpdateCommand } from "../workspace/update.ts";
 import { makeUpdateCommand } from "../update.ts";
-import { doctorGroup } from "../doctor.ts";
+import { doctorWorkspace } from "../doctor.ts";
 import { expectsExit } from "../../test/helpers.ts";
-import { createWorkspaceFixture, type WorkspaceFixture } from "../../test/workspace-fixture.ts";
+import { createHubFixture, type HubFixture } from "../../test/hub-fixture.ts";
 import { realConfigBackend } from "../../core/config-backend.ts";
 import { realFileSystemBackend } from "../../adapters/fs-backend.ts";
 import { getAppNames } from "../../core/config.ts";
-import { readGroupMeta, writeGroupMeta } from "../../core/group-meta.ts";
-import { resolveGroup } from "../../core/group.ts";
+import { readWorkspaceMeta, writeWorkspaceMeta } from "../../core/workspace-meta.ts";
+import { resolveWorkspace } from "../../core/workspace.ts";
 import { buildAttention, collectApps } from "../../core/health.ts";
 
 function recordingGh(result = { ok: true, output: "" }) {
@@ -27,22 +27,22 @@ function recordingGh(result = { ok: true, output: "" }) {
   return { calls, runGh };
 }
 
-describe("selectGroups", () => {
+describe("selectWorkspaces", () => {
   const existing = ["main", "feat", "other"];
-  test("defaults to the current feature group, never main", () => {
-    expect(selectGroups(undefined, "feat", existing)).toEqual(["feat"]);
-    expect(selectGroups(undefined, "main", existing)).toEqual([]);
-    expect(selectGroups(undefined, null, existing)).toEqual([]);
+  test("defaults to the current feature workspace, never main", () => {
+    expect(selectWorkspaces(undefined, "feat", existing)).toEqual(["feat"]);
+    expect(selectWorkspaces(undefined, "main", existing)).toEqual([]);
+    expect(selectWorkspaces(undefined, null, existing)).toEqual([]);
   });
   test("all, none and explicit lists", () => {
-    expect(selectGroups("all", null, existing)).toEqual(["feat", "other"]);
-    expect(selectGroups("none", "feat", existing)).toEqual([]);
-    expect(selectGroups("feat, main ,x", null, existing)).toEqual(["feat", "x"]);
+    expect(selectWorkspaces("all", null, existing)).toEqual(["feat", "other"]);
+    expect(selectWorkspaces("none", "feat", existing)).toEqual([]);
+    expect(selectWorkspaces("feat, main ,x", null, existing)).toEqual(["feat", "x"]);
   });
 });
 
 describe("create / publish", () => {
-  let fx: WorkspaceFixture;
+  let fx: HubFixture;
 
   afterEach(async () => {
     if (fx) await fx.tempDir.cleanup();
@@ -50,11 +50,11 @@ describe("create / publish", () => {
 
   const create = (args: Record<string, unknown>, runGh = recordingGh().runGh) =>
     makeCreateCommand(fx.mock.git, undefined, undefined, runGh).run!({
-      args: { branch: "main", workspace: fx.root, ...args },
+      args: { branch: "main", hub: fx.root, ...args },
     } as any);
 
   test("creates a local-only app in .bare/ and main/ and records it in jade.json", async () => {
-    fx = await createWorkspaceFixture(["api"]);
+    fx = await createHubFixture(["api"]);
     await create({ name: "billing" });
 
     expect(fx.mock.calls.find((c) => c.method === "initRepo")?.args).toEqual([
@@ -68,29 +68,29 @@ describe("create / publish", () => {
   });
 
   test("records a non-main default branch in jade.json", async () => {
-    fx = await createWorkspaceFixture([]);
+    fx = await createHubFixture([]);
     await create({ name: "billing", branch: "develop" });
     const cfg = await realConfigBackend.readConfig(fx.root);
     expect(cfg.apps).toContainEqual({ name: "billing", defaultBranch: "develop" });
   });
 
-  test("--groups adds worktrees on each group's branch, and updates review metadata", async () => {
-    fx = await createWorkspaceFixture(["api"]);
-    await makeWorkspaceAddCommand(fx.mock.git).run!({ args: { name: "feat", apps: "api", workspace: fx.root } } as any);
-    await makeWorkspaceAddCommand(fx.mock.git).run!({ args: { name: "JADE-1", apps: "api", workspace: fx.root } } as any);
+  test("--groups adds worktrees on each workspace's branch, and updates review metadata", async () => {
+    fx = await createHubFixture(["api"]);
+    await makeWorkspaceAddCommand(fx.mock.git).run!({ args: { name: "feat", apps: "api", hub: fx.root } } as any);
+    await makeWorkspaceAddCommand(fx.mock.git).run!({ args: { name: "JADE-1", apps: "api", hub: fx.root } } as any);
     const reviewPath = fx.appPath("JADE-1", "").replace(/\/$/, "");
-    await writeGroupMeta(reviewPath, { kind: "review", ticket: "JADE-1", branches: { api: "JADE-1" } });
+    await writeWorkspaceMeta(reviewPath, { kind: "review", ticket: "JADE-1", branches: { api: "JADE-1" } });
 
     await create({ name: "billing", groups: "all" });
 
     const state = fx.mock.getState(fx.barePath("billing"))!;
     expect(state.worktrees.get(fx.appPath("feat", "billing"))).toBe("feat");
     expect(state.worktrees.get(fx.appPath("JADE-1", "billing"))).toBe("JADE-1");
-    expect((await readGroupMeta(reviewPath))?.branches.billing).toBe("JADE-1");
+    expect((await readWorkspaceMeta(reviewPath))?.branches.billing).toBe("JADE-1");
   });
 
-  test("refuses bad names, existing apps and unknown groups before creating anything", async () => {
-    fx = await createWorkspaceFixture(["api"]);
+  test("refuses bad names, existing apps and unknown workspaces before creating anything", async () => {
+    fx = await createHubFixture(["api"]);
     await expectsExit(() => create({ name: "../evil" }));
     await expectsExit(() => create({ name: "api" }));
     await expectsExit(() => create({ name: "billing", groups: "nope" }));
@@ -98,7 +98,7 @@ describe("create / publish", () => {
   });
 
   test("--remote creates the repo with gh under orgUrl and publishes", async () => {
-    fx = await createWorkspaceFixture([]);
+    fx = await createHubFixture([]);
     await realConfigBackend.writeConfig(fx.root, {
       ...(await realConfigBackend.readConfig(fx.root)),
       orgUrl: "git@github.com:acme",
@@ -111,7 +111,7 @@ describe("create / publish", () => {
   });
 
   test("--remote with a bare-owner orgUrl creates the repo on GitHub over https", async () => {
-    fx = await createWorkspaceFixture([]);
+    fx = await createHubFixture([]);
     await realConfigBackend.writeConfig(fx.root, {
       ...(await realConfigBackend.readConfig(fx.root)),
       orgUrl: "acme",
@@ -124,18 +124,18 @@ describe("create / publish", () => {
   });
 
   test("--remote without an orgUrl keeps the local app and exits non-zero", async () => {
-    fx = await createWorkspaceFixture([]);
+    fx = await createHubFixture([]);
     await expectsExit(() => create({ name: "billing", remote: true }));
     expect(existsSync(fx.barePath("billing"))).toBe(true);
   });
 
   const publish = (args: Record<string, unknown>, runGh = recordingGh().runGh) =>
     makePublishCommand(fx.mock.git, undefined, undefined, runGh).run!({
-      args: { workspace: fx.root, ...args },
+      args: { hub: fx.root, ...args },
     } as any);
 
   test("publish --url skips gh and pushes only the default branch by default", async () => {
-    fx = await createWorkspaceFixture([]);
+    fx = await createHubFixture([]);
     await create({ name: "billing" });
     fx.mock.getState(fx.barePath("billing"))!.branches.add("wip");
     const gh = recordingGh();
@@ -151,7 +151,7 @@ describe("create / publish", () => {
   });
 
   test("publish refuses an app that already has a remote, and reports gh failures", async () => {
-    fx = await createWorkspaceFixture(["api"]);
+    fx = await createHubFixture(["api"]);
     await expectsExit(() => publish({ name: "api", url: "x" }));
 
     await realConfigBackend.writeConfig(fx.root, {
@@ -165,17 +165,17 @@ describe("create / publish", () => {
 });
 
 describe("guards for work that exists nowhere else", () => {
-  let fx: WorkspaceFixture;
+  let fx: HubFixture;
 
   afterEach(async () => {
     if (fx) await fx.tempDir.cleanup();
   });
 
   const remove = (args: Record<string, unknown>) =>
-    makeRemoveCommand(fx.mock.git).run!({ args: { workspace: fx.root, ...args } } as any);
+    makeRemoveCommand(fx.mock.git).run!({ args: { hub: fx.root, ...args } } as any);
 
   test("remove refuses an unpublished app unless --force", async () => {
-    fx = await createWorkspaceFixture(["api"]);
+    fx = await createHubFixture(["api"]);
     fx.mock.getState(fx.barePath("api"))!.hasOrigin = false;
 
     await expectsExit(() => remove({ name: "api" }));
@@ -186,7 +186,7 @@ describe("guards for work that exists nowhere else", () => {
   });
 
   test("remove refuses unpushed commits and uncommitted changes", async () => {
-    fx = await createWorkspaceFixture(["api", "web"]);
+    fx = await createHubFixture(["api", "web"]);
     fx.mock.getState(fx.barePath("api"))!.unpushed.add("feat");
     fx.mock.getState(fx.barePath("web"))!.statuses.set(fx.appPath("main", "web"), { staged: 0, unstaged: 1, untracked: 0 });
 
@@ -196,12 +196,12 @@ describe("guards for work that exists nowhere else", () => {
   });
 
   test("workspace remove -d -f doesn't force-delete branches of unpublished apps", async () => {
-    fx = await createWorkspaceFixture(["api", "web"]);
-    await makeWorkspaceAddCommand(fx.mock.git).run!({ args: { name: "feat", all: true, workspace: fx.root } } as any);
+    fx = await createHubFixture(["api", "web"]);
+    await makeWorkspaceAddCommand(fx.mock.git).run!({ args: { name: "feat", all: true, hub: fx.root } } as any);
     fx.mock.getState(fx.barePath("web"))!.hasOrigin = false;
 
     await makeWorkspaceRemoveCommand(fx.mock.git).run!({
-      args: { name: "feat", deleteBranches: true, force: true, workspace: fx.root },
+      args: { name: "feat", deleteBranches: true, force: true, hub: fx.root },
     } as any);
 
     const deletes = fx.mock.calls.filter((c) => c.method === "deleteBranch").map((c) => [c.args[0], c.args[2]]);
@@ -210,11 +210,11 @@ describe("guards for work that exists nowhere else", () => {
   });
 
   test("update and workspace update skip unpublished apps", async () => {
-    fx = await createWorkspaceFixture(["api", "web"]);
+    fx = await createHubFixture(["api", "web"]);
     fx.mock.getState(fx.barePath("web"))!.hasOrigin = false;
 
-    await makeUpdateCommand(fx.mock.git).run!({ args: { workspace: fx.root } } as any);
-    await makeWorkspaceUpdateCommand(fx.mock.git).run!({ args: { group: "main", workspace: fx.root } } as any);
+    await makeUpdateCommand(fx.mock.git).run!({ args: { hub: fx.root } } as any);
+    await makeWorkspaceUpdateCommand(fx.mock.git).run!({ args: { group: "main", hub: fx.root } } as any);
 
     const touched = fx.mock.calls
       .filter((c) => ["pullFF", "fetch", "mergeBranch"].includes(c.method))
@@ -224,16 +224,16 @@ describe("guards for work that exists nowhere else", () => {
   });
 
   test("status flags unpublished apps; doctor doesn't count them as problems", async () => {
-    fx = await createWorkspaceFixture(["api"]);
+    fx = await createHubFixture(["api"]);
     fx.mock.getState(fx.barePath("api"))!.hasOrigin = false;
     const config = await realConfigBackend.readConfig(fx.root);
-    const group = await resolveGroup(fx.root, "main", realFileSystemBackend);
-    const apps = await collectApps(fx.root, group, fx.mock.git, realFileSystemBackend, config, null, true);
+    const workspace = await resolveWorkspace(fx.root, "main", realFileSystemBackend);
+    const apps = await collectApps(fx.root, workspace, fx.mock.git, realFileSystemBackend, config, null, true);
 
-    expect(buildAttention(group, apps)).toContainEqual(
+    expect(buildAttention(workspace, apps)).toContainEqual(
       expect.objectContaining({ app: "api", kind: "unpublished", fix: "jade publish api" })
     );
-    const entries = await doctorGroup(fx.root, "main", fx.mock.git, realFileSystemBackend, config, {
+    const entries = await doctorWorkspace(fx.root, "main", fx.mock.git, realFileSystemBackend, config, {
       dryRun: false,
       addMissing: false,
     });

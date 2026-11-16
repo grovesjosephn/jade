@@ -2,8 +2,8 @@ import { describe, test, expect, afterEach } from "bun:test";
 import { mkdir } from "fs/promises";
 import { join } from "path";
 import {
-  findWorkspaceRoot,
-  isValidWorkspace,
+  findHub,
+  isHub,
   getBarePath,
   getMainWorktreePath,
   getConfigPath,
@@ -19,31 +19,31 @@ describe("workspace", () => {
     if (tempDir) await tempDir.cleanup();
   });
 
-  test("findWorkspaceRoot finds .bare walking up from nested dir", async () => {
+  test("findHub finds .bare walking up from nested dir", async () => {
     tempDir = await createTempDir();
     await mkdir(join(tempDir.path, ".bare"), { recursive: true });
     await mkdir(join(tempDir.path, "nested", "deep"), { recursive: true });
-    const root = await findWorkspaceRoot(join(tempDir.path, "nested", "deep"));
+    const root = await findHub(join(tempDir.path, "nested", "deep"));
     expect(root).toBe(tempDir.path);
   });
 
-  test("findWorkspaceRoot returns null when no workspace exists", async () => {
+  test("findHub returns null when no workspace exists", async () => {
     tempDir = await createTempDir();
     await mkdir(join(tempDir.path, "empty"), { recursive: true });
-    const root = await findWorkspaceRoot(join(tempDir.path, "empty"));
+    const root = await findHub(join(tempDir.path, "empty"));
     expect(root).toBeNull();
   });
 
-  test("isValidWorkspace returns true when .bare exists", async () => {
+  test("isHub returns true when .bare exists", async () => {
     tempDir = await createTempDir();
     await mkdir(join(tempDir.path, ".bare"), { recursive: true });
-    const valid = await isValidWorkspace(tempDir.path);
+    const valid = await isHub(tempDir.path);
     expect(valid).toBe(true);
   });
 
-  test("isValidWorkspace returns false when .bare missing", async () => {
+  test("isHub returns false when .bare missing", async () => {
     tempDir = await createTempDir();
-    const valid = await isValidWorkspace(tempDir.path);
+    const valid = await isHub(tempDir.path);
     expect(valid).toBe(false);
   });
 

@@ -1,9 +1,9 @@
 import { defineCommand } from "citty";
 import { resolve } from "path";
 import { intro, outro, cancel, spinner } from "../adapters/ui.ts";
-import { findWorkspaceRoot } from "../core/layout.ts";
 import { type GitBackend, realGitBackend } from "../adapters/git-backend.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../adapters/fs-backend.ts";
+import { hubArgs, resolveHub } from "../core/hub.ts";
 
 export function makeCheckoutCommand(
   git: GitBackend = realGitBackend,
@@ -30,21 +30,15 @@ export function makeCheckoutCommand(
         description: "Create a new branch",
         default: false,
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
-      },
+      ...hubArgs,
     },
     async run({ args }) {
       intro(`Checkout`);
 
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 

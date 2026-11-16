@@ -2,13 +2,13 @@ import { describe, test, expect, afterEach, beforeEach } from "bun:test";
 import { join } from "path";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { $ } from "bun";
-import { makeImportCommand, planImport, toGroupName } from "../import.ts";
+import { makeImportCommand, planImport, toWorkspaceName } from "../import.ts";
 import initCommand from "../init.ts";
 import { createTempDir, expectsExit, withCapturedConsole, type TempDir } from "../../test/helpers.ts";
 import { realConfigBackend } from "../../core/config-backend.ts";
 import { getAppNames } from "../../core/config.ts";
-import { readGroupMeta } from "../../core/group-meta.ts";
-import { resolveGroup } from "../../core/group.ts";
+import { readWorkspaceMeta } from "../../core/workspace-meta.ts";
+import { resolveWorkspace } from "../../core/workspace.ts";
 import { buildAttention, collectApps } from "../../core/health.ts";
 import { realGitBackend } from "../../adapters/git-backend.ts";
 import { realFileSystemBackend } from "../../adapters/fs-backend.ts";
@@ -16,48 +16,48 @@ import { gitCheckImport } from "../../adapters/git-import.ts";
 import { importBlockers } from "../../core/import-check.ts";
 
 describe("planImport", () => {
-  test("a feature branch gets a group named after it", () => {
+  test("a feature branch gets a workspace named after it", () => {
     expect(planImport({ branch: "login", dirty: true }, "main", undefined)).toEqual({
-      group: "login",
+      workspace: "login",
       branch: "login",
       newBranch: false,
     });
     expect(planImport({ branch: "feature/login", dirty: false }, "main", undefined)).toEqual({
-      group: "feature-login",
+      workspace: "feature-login",
       branch: "feature/login",
       newBranch: false,
     });
   });
 
-  test("--group renames the group but keeps a feature branch", () => {
+  test("--group renames the workspace but keeps a feature branch", () => {
     expect(planImport({ branch: "login", dirty: false }, "main", "auth")).toEqual({
-      group: "auth",
+      workspace: "auth",
       branch: "login",
       newBranch: false,
     });
   });
 
   test("work on the default branch or a detached HEAD needs --group, and goes on a new branch", () => {
-    expect(planImport({ branch: "main", dirty: false }, "main", undefined)).toEqual({ group: null });
+    expect(planImport({ branch: "main", dirty: false }, "main", undefined)).toEqual({ workspace: null });
     expect(planImport({ branch: "main", dirty: true }, "main", undefined)).toHaveProperty("error");
     expect(planImport({ branch: null, dirty: true }, "main", undefined)).toHaveProperty("error");
     // A clean detached HEAD may still hold commits no branch has
     expect(planImport({ branch: null, dirty: false }, "main", undefined)).toHaveProperty("error");
     expect(planImport({ branch: null, dirty: false }, "main", "keep")).toEqual({
-      group: "keep",
+      workspace: "keep",
       branch: "keep",
       newBranch: true,
     });
     expect(planImport({ branch: "main", dirty: true }, "main", "wip")).toEqual({
-      group: "wip",
+      workspace: "wip",
       branch: "wip",
       newBranch: true,
     });
     expect(planImport({ branch: "main", dirty: true }, "main", "main")).toHaveProperty("error");
   });
 
-  test("toGroupName flattens slashes", () => {
-    expect(toGroupName("a/b/c")).toBe("a-b-c");
+  test("toWorkspaceName flattens slashes", () => {
+    expect(toWorkspaceName("a/b/c")).toBe("a-b-c");
   });
 });
 
@@ -93,7 +93,7 @@ describe("jade import", () => {
     return r.stdout.toString().trimEnd();
   };
   const run = (args: Record<string, unknown>) =>
-    makeImportCommand().run!({ args: { workspace: root, ...args } } as any);
+    makeImportCommand().run!({ args: { hub: root, ...args } } as any);
 
   /** An upstream repo and a clone of it at <tmp>/<name>, like a normal checkout */
   async function sourceClone(name = "app") {
@@ -110,7 +110,7 @@ describe("jade import", () => {
     return { upstream, src };
   }
 
-  test("moves a feature branch and all uncommitted work into a group, leaving the source alone", async () => {
+  test("moves a feature branch and all uncommitted work into a workspace, leaving the source alone", async () => {
     const { upstream, src } = await sourceClone();
     await git(src, "checkout", "-qb", "feature/login");
     await Bun.write(join(src, "a.txt"), "a\ncommitted\n");
@@ -131,17 +131,17 @@ describe("jade import", () => {
     await run({ path: src });
 
     const main = join(root, "main", "app");
-    const group = join(root, "workspace", "feature-login", "app");
+    const workspace = join(root, "workspace", "feature-login", "app");
     const bare = join(root, ".bare", "app");
 
     expect(await git(main, "branch", "--show-current")).toBe("main");
     expect(await git(main, "status", "--porcelain")).toBe("");
-    expect(await git(group, "branch", "--show-current")).toBe("feature/login");
-    expect(await git(group, "status", "--porcelain")).toBe(statusBefore.replace("?? nested/\n", ""));
-    expect(readFileSync(join(group, "a.txt"), "utf8")).toBe("a\ncommitted\nstaged\nunstaged\n");
-    expect(await git(group, "diff", "--cached", "--name-only")).toBe("a.txt\ngone.txt");
-    expect(existsSync(join(group, "ignored"))).toBe(false);
-    expect(readFileSync(join(group, ".env"), "utf8")).toBe("SECRET=1\n");
+    expect(await git(workspace, "branch", "--show-current")).toBe("feature/login");
+    expect(await git(workspace, "status", "--porcelain")).toBe(statusBefore.replace("?? nested/\n", ""));
+    expect(readFileSync(join(workspace, "a.txt"), "utf8")).toBe("a\ncommitted\nstaged\nunstaged\n");
+    expect(await git(workspace, "diff", "--cached", "--name-only")).toBe("a.txt\ngone.txt");
+    expect(existsSync(join(workspace, "ignored"))).toBe(false);
+    expect(readFileSync(join(workspace, ".env"), "utf8")).toBe("SECRET=1\n");
     expect(readFileSync(join(main, ".env"), "utf8")).toBe("SECRET=1\n");
 
     // origin points at the real upstream, with its remote-tracking refs and HEAD
@@ -157,16 +157,16 @@ describe("jade import", () => {
     expect(await git(src, "stash", "list")).toBe("");
 
     expect(getAppNames(await realConfigBackend.readConfig(root))).toContain("app");
-    expect(await readGroupMeta(join(root, "workspace", "feature-login"))).toEqual({
+    expect(await readWorkspaceMeta(join(root, "workspace", "feature-login"))).toEqual({
       kind: "import",
       branches: { app: "feature/login" },
     });
 
-    // status and doctor see both groups as healthy, not drifted
+    // status and doctor see both workspaces as healthy, not drifted
     const config = await realConfigBackend.readConfig(root);
     for (const name of ["main", "feature-login"]) {
-      const g = await resolveGroup(root, name);
-      const meta = await readGroupMeta(g.path);
+      const g = await resolveWorkspace(root, name);
+      const meta = await readWorkspaceMeta(g.path);
       const apps = await collectApps(root, g, realGitBackend, realFileSystemBackend, config, meta, true);
       const kinds = buildAttention(g, apps).map((a) => a.kind);
       expect(kinds).not.toContain("branch-drift");
@@ -174,7 +174,7 @@ describe("jade import", () => {
     }
   });
 
-  test("a group named after its branch needs no metadata", async () => {
+  test("a workspace named after its branch needs no metadata", async () => {
     const { src } = await sourceClone();
     await git(src, "checkout", "-qb", "login");
     await run({ path: src });
@@ -196,10 +196,10 @@ describe("jade import", () => {
     expect(existsSync(join(root, ".bare", "app"))).toBe(false);
 
     await run({ path: src, group: "wip" });
-    const group = join(root, "workspace", "wip", "app");
-    expect(await git(group, "branch", "--show-current")).toBe("wip");
-    expect(await git(group, "rev-parse", "HEAD")).toBe(await git(src, "rev-parse", "HEAD"));
-    expect(await git(group, "status", "--porcelain")).toBe(" M a.txt");
+    const workspace = join(root, "workspace", "wip", "app");
+    expect(await git(workspace, "branch", "--show-current")).toBe("wip");
+    expect(await git(workspace, "rev-parse", "HEAD")).toBe(await git(src, "rev-parse", "HEAD"));
+    expect(await git(workspace, "status", "--porcelain")).toBe(" M a.txt");
     expect(await git(join(root, "main", "app"), "status", "--porcelain")).toBe("");
   });
 
@@ -236,7 +236,7 @@ describe("jade import", () => {
     await git(outer, "commit", "-qm", "init");
     const inner = join(outer, "ws");
     await initCommand.run!({ args: { path: inner } } as any);
-    await expectsExit(() => makeImportCommand().run!({ args: { path: outer, workspace: inner } } as any));
+    await expectsExit(() => makeImportCommand().run!({ args: { path: outer, hub: inner } } as any));
     expect(existsSync(join(inner, ".bare", "outer"))).toBe(false);
   });
   test("keeps every remote: URLs, push URLs, remote-tracking refs and <remote>/HEAD", async () => {
@@ -268,7 +268,7 @@ describe("jade import", () => {
       return JSON.parse(lines[0]!);
     };
 
-    test("an import prints one object: paths, group, carried work, remotes, check and next steps", async () => {
+    test("an import prints one object: paths, workspace, carried work, remotes, check and next steps", async () => {
       const { src } = await sourceClone();
       await git(src, "checkout", "-qb", "feature/login");
       await Bun.write(join(src, "a.txt"), "dirty\n");
@@ -278,6 +278,8 @@ describe("jade import", () => {
         mode: "import",
         app: "app",
         main: { path: join(root, "main", "app"), branch: "main" },
+        workspace: { name: "feature-login", branch: "feature/login", newBranch: false },
+        // The pre-0.4 name, kept beside `workspace` for older readers.
         group: { name: "feature-login", branch: "feature/login", newBranch: false },
         carried: { tracked: true, untracked: [] },
         remotes: ["origin"],
@@ -357,10 +359,10 @@ describe("jade import", () => {
       await Bun.write(join(src, "a.txt"), "dirty\n");
       await Bun.write(join(src, "new.txt"), "untracked\n");
       await run({ path: src });
-      const group = join(root, "workspace", "login", "app");
-      await git(group, "add", ".");
-      await git(group, "commit", "-qm", "carried work");
-      await Bun.write(join(group, "a.txt"), "edited again\n");
+      const workspace = join(root, "workspace", "login", "app");
+      await git(workspace, "add", ".");
+      await git(workspace, "commit", "-qm", "carried work");
+      await Bun.write(join(workspace, "a.txt"), "edited again\n");
       expect(importBlockers(await check(src))).toEqual([]);
     });
 

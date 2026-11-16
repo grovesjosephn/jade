@@ -2,10 +2,11 @@ import { defineCommand } from "citty";
 import { resolve } from "path";
 import { multiselect, isCancel } from "@clack/prompts";
 import { intro, outro, cancel, log, spinner, canPrompt } from "../../adapters/ui.ts";
-import { findWorkspaceRoot, getBarePath, getWorktreeGroupPath, listBareRepos } from "../../core/layout.ts";
+import { getBarePath, getWorkspacePath, listBareRepos } from "../../core/layout.ts";
 import { type GitBackend, realGitBackend } from "../../adapters/git-backend.ts";
 import { copyEnvToWorktree } from "../../core/env.ts";
 import { type FileSystemBackend, realFileSystemBackend } from "../../adapters/fs-backend.ts";
+import { hubArgs, resolveHub } from "../../core/hub.ts";
 
 export type SelectAppsFn = (apps: string[]) => Promise<string[] | symbol>;
 
@@ -85,25 +86,19 @@ export function makeWorkspaceAddCommand(
         description:
           "Start new branches from this branch, tag or commit (origin/<from> preferred) instead of the repo's HEAD",
       },
-      workspace: {
-        type: "string",
-        alias: "w",
-        description: "Workspace root path",
-      },
+      ...hubArgs,
     },
     async run({ args }) {
-      const workspaceRoot = args.workspace
-        ? resolve(args.workspace as string)
-        : await findWorkspaceRoot(process.cwd(), fs);
+      const hub = await resolveHub(args, fs);
 
-      if (!workspaceRoot) {
-        cancel(`Not in a jade workspace. Run 'jade init' first.`);
+      if (!hub) {
+        cancel(`Not in a jade hub. Run 'jade init' first.`);
         process.exit(1);
       }
 
       const name = args.name as string;
       const all = args.all as boolean;
-      const worktreeDirPath = getWorktreeGroupPath(workspaceRoot, name);
+      const worktreeDirPath = getWorkspacePath(hub, name);
       const existing = await fs.pathExists(worktreeDirPath);
 
       intro(existing ? `Adding apps to workspace '${name}'` : `Creating workspace`);
@@ -111,8 +106,8 @@ export function makeWorkspaceAddCommand(
       try {
         await fs.mkdirp(worktreeDirPath);
 
-        const bareRepos = await listBareRepos(workspaceRoot, fs);
-        const barePath = getBarePath(workspaceRoot);
+        const bareRepos = await listBareRepos(hub, fs);
+        const barePath = getBarePath(hub);
 
         const presentApps = existing
           ? await Promise.all(bareRepos.map(async (app) => ({ app, exists: await fs.pathExists(resolve(worktreeDirPath, app)) })))
@@ -198,7 +193,7 @@ export function makeWorkspaceAddCommand(
         const envCopied: string[] = [];
         for (const appName of selectedApps) {
           const appWorktreePath = resolve(worktreeDirPath, appName);
-          if (await copyEnvToWorktree(workspaceRoot, appName, appWorktreePath, fs)) {
+          if (await copyEnvToWorktree(hub, appName, appWorktreePath, fs)) {
             envCopied.push(appName);
           }
         }

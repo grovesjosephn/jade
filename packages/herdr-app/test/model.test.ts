@@ -5,13 +5,14 @@ import {
   changes,
   inside,
   mostUrgent,
-  orderGroups,
+  orderWorkspaces,
   problems,
+  readHubView,
   shownApps,
-  spaceForGroup,
+  spaceForWorkspace,
   summary,
   tilde,
-  validGroupName,
+  validWorkspaceName,
 } from "../mods/jade/model.js";
 
 const ROOT = "/w";
@@ -37,8 +38,8 @@ describe("jade herdr-app model", () => {
     expect(inside(null as any, "/w")).toBe(false);
   });
 
-  test("groups: main first, features by name, review tickets last", () => {
-    expect(orderGroups(["JADE-42", "zeta", "main", "auth"])).toEqual(["main", "auth", "zeta", "JADE-42"]);
+  test("workspaces: main first, features by name, review tickets last", () => {
+    expect(orderWorkspaces(["JADE-42", "zeta", "main", "auth"])).toEqual(["main", "auth", "zeta", "JADE-42"]);
   });
 
   test("app state: drift and detached beat dirty; missing and errors are their own", () => {
@@ -60,7 +61,7 @@ describe("jade herdr-app model", () => {
     expect(mostUrgent([])).toBeNull();
   });
 
-  test("the space for a group: named after it and in it first, then any local space in it", () => {
+  test("the space for a workspace: named after it and in it first, then any local space in it", () => {
     const panes = [
       { pane: "p1", tab: "a1", cwd: "/w/workspace/feat/api" },
       { pane: "p2", tab: "b1", cwd: "/w/workspace/feat" },
@@ -71,11 +72,11 @@ describe("jade herdr-app model", () => {
       { id: "b", name: "feat", named: true, machine: null, folder: "", tabs: [{ id: "b1" }] },
       { id: "c", name: "feat", named: true, machine: "vps", folder: "", tabs: [{ id: "c1" }] },
     ];
-    const group = { name: "feat", path: "/w/workspace/feat" };
-    expect(spaceForGroup(group, spaces, panes)?.id).toBe("b");
-    expect(spaceForGroup(group, spaces.slice(0, 1), panes)?.id).toBe("a");
-    expect(spaceForGroup(group, [spaces[2]], panes)).toBeNull();
-    expect(spaceForGroup({ name: "other", path: "/w/workspace/other" }, spaces, panes)).toBeNull();
+    const workspace = { name: "feat", path: "/w/workspace/feat" };
+    expect(spaceForWorkspace(workspace, spaces, panes)?.id).toBe("b");
+    expect(spaceForWorkspace(workspace, spaces.slice(0, 1), panes)?.id).toBe("a");
+    expect(spaceForWorkspace(workspace, [spaces[2]], panes)).toBeNull();
+    expect(spaceForWorkspace({ name: "other", path: "/w/workspace/other" }, spaces, panes)).toBeNull();
   });
 
   test("agents in a folder go by their pane's live folder", () => {
@@ -90,19 +91,19 @@ describe("jade herdr-app model", () => {
     expect(agentsIn("/w/workspace/feat", agents, panes).map((a) => a.status)).toEqual(["working"]);
   });
 
-  test("unpublished isn't a problem to fix; the summary counts apps once across groups", () => {
+  test("unpublished isn't a problem to fix; the summary counts apps once across workspaces", () => {
     const main = {
       apps: [app(), app({ name: "web", tree: { staged: 0, unstaged: 1, untracked: 0, clean: false } })],
       attention: [{ app: "web", kind: "unpublished" }],
     };
     const feat = { apps: [app({ present: false })], attention: [{ app: "api", kind: "missing-worktree" }] };
     expect(problems(main)).toEqual([]);
-    expect(summary([main, feat])).toEqual({ apps: 2, groups: 2, dirty: 1, needs: 1 });
+    expect(summary([main, feat])).toEqual({ apps: 2, workspaces: 2, dirty: 1, needs: 1 });
   });
 
-  test("group names jade workspace add accepts", () => {
-    for (const ok of ["feat-auth", "JADE-42", "v1.2_fix"]) expect(validGroupName(ok)).toBe(true);
-    for (const bad of ["main", "-x", "a/b", "a..b", "", "with space"]) expect(validGroupName(bad)).toBe(false);
+  test("workspace names jade workspace add accepts", () => {
+    for (const ok of ["feat-auth", "JADE-42", "v1.2_fix"]) expect(validWorkspaceName(ok)).toBe(true);
+    for (const bad of ["main", "-x", "a/b", "a..b", "", "with space"]) expect(validWorkspaceName(bad)).toBe(false);
   });
 
   test("tilde shortens paths under home only", () => {
@@ -110,7 +111,7 @@ describe("jade herdr-app model", () => {
     expect(tilde("/home/meow", "/home/me")).toBe("/home/meow");
   });
 
-  test("shownApps: none for main, only held apps for other groups", () => {
+  test("shownApps: none for main, only held apps for other workspaces", () => {
     const apps = [
       { name: "a", present: true },
       { name: "b", present: false },
@@ -119,5 +120,14 @@ describe("jade herdr-app model", () => {
     expect(shownApps({ workspace: "main", apps })).toEqual([]);
     expect(shownApps({ workspace: "feat-x", apps }).map((a) => a.name)).toEqual(["a", "c"]);
     expect(shownApps({ workspace: "JADE-1" })).toEqual([]);
+  });
+
+  test("readHubView reads jade 0.4's hub summary and the older root one", () => {
+    const now = { view: "hub", version: "0.4.0", hub: "/h", root: "/h", orgUrl: "acme", workspaces: ["main", "x"], groups: ["main", "x"] };
+    const old = { view: "root", version: "0.3.0", root: "/h", orgUrl: "acme", groups: ["main", "x"] };
+    expect(readHubView(now)).toEqual({ hub: "/h", workspaces: ["main", "x"], version: "0.4.0", orgUrl: "acme" });
+    expect(readHubView(old)).toEqual({ hub: "/h", workspaces: ["main", "x"], version: "0.3.0", orgUrl: "acme" });
+    expect(readHubView({ view: "workspace", workspace: "x" })).toBeNull();
+    expect(readHubView(null)).toBeNull();
   });
 });

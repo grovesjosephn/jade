@@ -22,12 +22,12 @@ describe("herdr-core client", () => {
     const { calls, core } = fakeHerdrCore({
       stdout: JSON.stringify({ address: "t2c", agent: "sh", cwd: "/w", name: "api", parent: "t10", state: "live", turn: 0 }),
     });
-    const t = await core.start(["bun", "dev"], { name: "api", cwd: "/w", labels: { "jade.group": "feat" }, outliveParent: true });
+    const t = await core.start(["bun", "dev"], { name: "api", cwd: "/w", labels: { "jade.workspace": "feat" }, outliveParent: true });
 
     expect(calls[0]).toEqual([
-      "run", "--json", "--bg", "--name", "api", "--cwd", "/w", "--label", "jade.group=feat", "--outlive-parent", "--", "bun", "dev",
+      "run", "--json", "--bg", "--name", "api", "--cwd", "/w", "--label", "jade.workspace=feat", "--outlive-parent", "--", "bun", "dev",
     ]);
-    expect(t).toMatchObject({ address: "t2c", name: "api", state: "live", status: null, labels: { "jade.group": "feat" } });
+    expect(t).toMatchObject({ address: "t2c", name: "api", state: "live", status: null, labels: { "jade.workspace": "feat" } });
   });
 
   test("list maps terminals and passes --all", async () => {
