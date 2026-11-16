@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import { cp, lstat, mkdir, readdir } from "fs/promises";
 import { dirname, isAbsolute, resolve } from "path";
 import { fsExists, fsRemove } from "./fs.ts";
@@ -53,14 +54,18 @@ export function originOf(source: Pick<ImportSource, "remotes">): SourceRemote | 
 /**
  * A remote URL as the bare repo should see it. Local paths are relative to
  * the source's work tree; the bare repo lives elsewhere, so make them absolute.
- * URLs with a scheme and scp-style `host:path` are left alone.
+ * URLs with a scheme and scp-style `host:path` are left alone, and so is a
+ * relative URL that names nothing on disk: a placeholder such as `no_push`
+ * (set as a push URL to block pushes) must stay a placeholder.
  */
 function absoluteRemoteUrl(sourceRoot: string, url: string): string {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
   const colon = url.indexOf(":");
   const slash = url.indexOf("/");
   if (colon > 0 && (slash === -1 || colon < slash)) return url;
-  return isAbsolute(url) || url.startsWith("~") ? url : resolve(sourceRoot, url);
+  if (isAbsolute(url) || url.startsWith("~")) return url;
+  const local = resolve(sourceRoot, url);
+  return existsSync(local) ? local : url;
 }
 
 async function listRemotes(root: string): Promise<SourceRemote[]> {

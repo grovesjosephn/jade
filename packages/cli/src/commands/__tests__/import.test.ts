@@ -260,6 +260,15 @@ describe("jade import", () => {
     expect(await git(bare, "config", "remote.upstream.fetch")).toBe("+refs/heads/*:refs/remotes/upstream/*");
   });
 
+  test("a placeholder push URL such as no_push stays as written", async () => {
+    const { src } = await sourceClone();
+    await git(src, "remote", "set-url", "--push", "origin", "no_push");
+
+    await run({ path: src });
+    const bare = join(root, ".bare", "app");
+    expect(await git(bare, "remote", "get-url", "--push", "origin")).toBe("no_push");
+  });
+
   describe("--json", () => {
     /** Run with --json and parse stdout, which must be exactly one JSON object */
     const runJson = async (args: Record<string, unknown>) => {
