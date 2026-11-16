@@ -2,7 +2,9 @@
 
 Notable changes to `jade`, a CLI for managing multi-repo development hubs built on git bare repos + worktrees. Releases are tagged from `v0.3.0` on, and each heading is `packages/cli`'s `package.json` version; earlier entries are untagged and grouped by rough date.
 
-## Unreleased
+## 0.4.0 — 2026-11
+
+Packages: CLI 0.4.0, herdr-app mod 0.3.0, herdr-tui plugin 0.2.0.
 
 ### Renamed: root → hub, group → workspace
 
@@ -21,6 +23,7 @@ What changes for you, and what keeps working:
 
 ### Fixed
 
+- `jade --help` shows the real version. It was hardcoded and still said 0.2.0.
 - `jade import` keeps a placeholder push URL such as `no_push` (set to block pushes) as written. A relative remote URL is only made absolute when it names something on disk; before, the placeholder became a path into the source repo.
 
 ## 0.3.0 — 2026-11

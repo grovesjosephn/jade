@@ -16,11 +16,12 @@ import doctor from "./src/commands/doctor.ts";
 import create from "./src/commands/create.ts";
 import publish from "./src/commands/publish.ts";
 import importCommand from "./src/commands/import.ts";
+import pkg from "./package.json" with { type: "json" };
 
 const main = defineCommand({
   meta: {
     name: "jade",
-    version: "0.2.0",
+    version: pkg.version,
     description: "Multi-repo hubs of git worktrees: one bare clone per app, a workspace per branch",
   },
   subCommands: {

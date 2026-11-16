@@ -1,7 +1,7 @@
 # jade for herdr-tui
 
 A [herdr-tui](https://herdr.dev) plugin (`josephgroves.jade`) that puts jade
-into herdr-tui's UI. Version 0.1.0; see the [changelog](../../CHANGELOG.md).
+into herdr-tui's UI. Version 0.2.0; see the [changelog](../../CHANGELOG.md).
 
 | Entry point | Kind | What it does |
 |---|---|---|

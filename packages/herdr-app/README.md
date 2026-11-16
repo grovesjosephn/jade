@@ -1,7 +1,7 @@
 # jade for herdr-app
 
 A [herdr-app](https://herdr.dev) mod that shows a jade hub's workspaces and apps
-next to your spaces and agents, and opens them as spaces. Version 0.2.0; see
+next to your spaces and agents, and opens them as spaces. Version 0.3.0; see
 the [changelog](../../CHANGELOG.md).
 
 - **One card per workspace:** `main` first, then feature workspaces under "Workspaces" and review workspaces (ticket names like `JADE-42`) under "Reviews". Each card's header has the workspace's name over a summary line (its apps, its agents, and whether it's open as a space).

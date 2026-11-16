@@ -1,6 +1,6 @@
 id = "josephgroves.jade"
 name = "Jade Workspaces"
-version = "0.1.0"
+version = "0.2.0"
 min_herdr_version = "0.7.0"
 description = "Manage jade multi-repo workspaces from herdr-tui: open jade workspaces in herdr-tui, sync env files, and browse or create workspaces from a board pane."
 platforms = ["linux", "macos", "windows"]

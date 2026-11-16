@@ -9,7 +9,7 @@ Clone each repo once. Work on many branches across many repos at the same time.
 ![Bun](https://img.shields.io/badge/runtime-bun-f9f1e1?logo=bun&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/lang-typescript-3178c6?logo=typescript&logoColor=white)
 ![Git](https://img.shields.io/badge/git-%E2%89%A52.5-f05032?logo=git&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.3.0-2e8b57)
+![Version](https://img.shields.io/badge/version-0.4.0-2e8b57)
 
 [Why jade?](#-why-jade) ·
 [Install](#-install) ·
@@ -326,9 +326,9 @@ This repo is a Bun workspace with three packages:
 
 | Package | Version | Description |
 |---|---|---|
-| [`packages/cli`](packages/cli) | 0.3.0 | The `jade` CLI (citty + @clack/prompts). This README is its documentation. |
-| [`packages/herdr-tui`](packages/herdr-tui) | 0.1.0 | The herdr-tui plugin. See its [README](packages/herdr-tui/README.md). |
-| [`packages/herdr-app`](packages/herdr-app) | 0.2.0 | The herdr-app mod. See its [README](packages/herdr-app/README.md). |
+| [`packages/cli`](packages/cli) | 0.4.0 | The `jade` CLI (citty + @clack/prompts). This README is its documentation. |
+| [`packages/herdr-tui`](packages/herdr-tui) | 0.2.0 | The herdr-tui plugin. See its [README](packages/herdr-tui/README.md). |
+| [`packages/herdr-app`](packages/herdr-app) | 0.3.0 | The herdr-app mod. See its [README](packages/herdr-app/README.md). |
 
 ```bash
 bun test                # run the test suite
